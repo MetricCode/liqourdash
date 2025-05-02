@@ -101,6 +101,7 @@ npm install @react-navigation/bottom-tabs @react-native-picker/picker firebase r
 npx expo start
 
 ## Project Structure
+```
 liquordash/
 ├── app/
 │   ├── screens/
@@ -127,7 +128,7 @@ liquordash/
 ├── metro.config.js                 # Metro bundler configuration
 ├── package.json                    # Project dependencies
 └── README.md                       # Project documentation
-
+```
 ## Authentication & Role-Based Flow
 
 1. **Initial Load**: App checks if user is already authenticated
