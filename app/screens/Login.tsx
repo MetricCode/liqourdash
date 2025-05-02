@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
-import { FIREBASE_AUTH } from '../../FirebaseConfig'
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
+// Login.tsx (modified version)
+import React, { useState } from 'react';
+import { FIREBASE_AUTH, FIREBASE_DB, USER_ROLES } from '../../FirebaseConfig';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import {
   View,
   Text,
@@ -14,13 +16,15 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 
 const Login = () => {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [isLogin, setIsLogin] = useState(true)
-  const auth = FIREBASE_AUTH
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
+  const [userRole, setUserRole] = useState(USER_ROLES.CUSTOMER);
+  const auth = FIREBASE_AUTH;
 
   const handleAuthentication = async () => {
     if (!email || !password) {
@@ -44,8 +48,17 @@ const Login = () => {
         // No need for navigation - App.tsx will handle it based on auth state
       } else {
         // Create new user
-        await createUserWithEmailAndPassword(auth, email, password);
-        console.log('Account created successfully');
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Save the user role in Firestore
+        await setDoc(doc(FIREBASE_DB, 'users', user.uid), {
+          email: user.email,
+          role: userRole,
+          createdAt: new Date().toISOString(),
+        });
+        
+        console.log('Account created successfully with role:', userRole);
         // No need for navigation - App.tsx will handle it based on auth state
       }
     } catch (error) {
@@ -78,6 +91,7 @@ const Login = () => {
     setIsLogin(!isLogin);
     setEmail('');
     setPassword('');
+    setUserRole(USER_ROLES.CUSTOMER);
   };
 
   return (
@@ -117,6 +131,23 @@ const Login = () => {
               autoCapitalize="none"
               onChangeText={(text) => setPassword(text)}
             />
+            
+            {!isLogin && (
+              <View style={styles.roleContainer}>
+                <Text style={styles.roleLabel}>Select Account Type:</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={userRole}
+                    style={styles.picker}
+                    onValueChange={(itemValue) => setUserRole(itemValue)}
+                  >
+                    <Picker.Item label="Customer" value={USER_ROLES.CUSTOMER} />
+                    <Picker.Item label="Delivery Personnel" value={USER_ROLES.DELIVERY} />
+                    <Picker.Item label="Admin" value={USER_ROLES.ADMIN} />
+                  </Picker>
+                </View>
+              </View>
+            )}
     
             {isLogin && (
               <TouchableOpacity style={styles.forgotPasswordContainer}>
@@ -206,6 +237,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     backgroundColor: '#fff',
     fontSize: 16,
+  },
+  roleContainer: {
+    marginBottom: 15,
+  },
+  roleLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  pickerContainer: {
+    borderColor: '#e0e0e0',
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  picker: {
+    height: 50,
   },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
