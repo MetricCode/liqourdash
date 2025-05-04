@@ -1,8 +1,11 @@
-// Login.tsx (modified version)
+// Login.tsx
 import React, { useState } from 'react';
-import { FIREBASE_AUTH, FIREBASE_DB, USER_ROLES } from '../../FirebaseConfig';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { FIREBASE_AUTH, FIREBASE_DB } from '../../FirebaseConfig';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword 
+} from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import {
   View,
   Text,
@@ -16,14 +19,12 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
-  const [userRole, setUserRole] = useState(USER_ROLES.CUSTOMER);
   const auth = FIREBASE_AUTH;
 
   const handleAuthentication = async () => {
@@ -39,46 +40,43 @@ const Login = () => {
   
     setLoading(true);
     try {
-      console.log(`Attempting to ${isLogin ? 'sign in' : 'create'} user with email: ${email}`);
-      
       if (isLogin) {
-        // Login user
+        // Sign in existing user
         await signInWithEmailAndPassword(auth, email, password);
-        console.log('Login successful');
-        // No need for navigation - App.tsx will handle it based on auth state
       } else {
-        // Create new user
+        // Create new user (always as customer)
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         
-        // Save the user role in Firestore
+        // Create user document with customer role
         await setDoc(doc(FIREBASE_DB, 'users', user.uid), {
           email: user.email,
-          role: userRole,
-          createdAt: new Date().toISOString(),
+          role: 'customer', // Default role
+          createdAt: serverTimestamp(),
         });
-        
-        console.log('Account created successfully with role:', userRole);
-        // No need for navigation - App.tsx will handle it based on auth state
       }
-    } catch (error) {
-      console.log('Authentication error:', error);
-      let errorMessage = 'An error occurred';
-
-      const firebaseError = error as { code?: string; message?: string };
-
-      if (firebaseError.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address';
-      } else if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password') {
-        errorMessage = 'Invalid email or password';
-      } else if (firebaseError.code === 'auth/email-already-in-use') {
-        errorMessage = 'Email already in use';
-      } else if (firebaseError.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak';
-      } else if (firebaseError.code === 'auth/network-request-failed') {
-        errorMessage = 'Network error. Please check your connection.';
-      } else if (firebaseError.message) {
-        errorMessage = firebaseError.message;
+    } catch (error: any) {
+      let errorMessage = 'Authentication failed. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          errorMessage = 'Invalid email or password';
+          break;
+        case 'auth/email-already-in-use':
+          errorMessage = 'Email already in use';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Password should be at least 6 characters';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection.';
+          break;
+        default:
+          console.error('Authentication error:', error);
       }
       
       Alert.alert('Error', errorMessage);
@@ -91,7 +89,6 @@ const Login = () => {
     setIsLogin(!isLogin);
     setEmail('');
     setPassword('');
-    setUserRole(USER_ROLES.CUSTOMER);
   };
 
   return (
@@ -103,9 +100,12 @@ const Login = () => {
         <ScrollView 
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.headerContainer}>
-            <Text style={styles.headerText}>{isLogin ? 'Welcome Back' : 'Create Account'}</Text>
+            <Text style={styles.headerText}>
+              {isLogin ? 'Welcome Back' : 'Create Account'}
+            </Text>
             <Text style={styles.subHeaderText}>
               {isLogin ? 'Sign in to continue' : 'Sign up to get started'}
             </Text>
@@ -119,44 +119,36 @@ const Login = () => {
               placeholderTextColor="#999"
               autoCapitalize="none"
               keyboardType="email-address"
-              onChangeText={(text) => setEmail(text)}
+              onChangeText={setEmail}
+              autoCorrect={false}
             />
             
             <TextInput
-              secureTextEntry={true}
+              secureTextEntry
               value={password}
               style={styles.input}
               placeholder="Password"
               placeholderTextColor="#999"
               autoCapitalize="none"
-              onChangeText={(text) => setPassword(text)}
+              onChangeText={setPassword}
+              autoCorrect={false}
             />
-            
-            {!isLogin && (
-              <View style={styles.roleContainer}>
-                <Text style={styles.roleLabel}>Select Account Type:</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={userRole}
-                    style={styles.picker}
-                    onValueChange={(itemValue) => setUserRole(itemValue)}
-                  >
-                    <Picker.Item label="Customer" value={USER_ROLES.CUSTOMER} />
-                    <Picker.Item label="Delivery Personnel" value={USER_ROLES.DELIVERY} />
-                    <Picker.Item label="Admin" value={USER_ROLES.ADMIN} />
-                  </Picker>
-                </View>
-              </View>
-            )}
     
-            {isLogin && (
-              <TouchableOpacity style={styles.forgotPasswordContainer}>
+            {isLogin ? (
+              <TouchableOpacity 
+                style={styles.forgotPasswordContainer}
+                onPress={() => Alert.alert('Info', 'Password reset functionality would go here')}
+              >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
+            ) : (
+              <Text style={styles.signupNote}>
+                Welcome to LiqourDash! By signing up, you agree to our Terms of Service and Privacy Policy.
+              </Text>
             )}
     
             <TouchableOpacity
-              style={styles.authButton}
+              style={[styles.authButton, loading && styles.disabledButton]}
               onPress={handleAuthentication}
               disabled={loading}
             >
@@ -202,28 +194,24 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     marginBottom: 30,
+    alignItems: 'center',
   },
   headerText: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#333',
-    textAlign: 'center',
   },
   subHeaderText: {
     fontSize: 16,
     color: '#666',
-    textAlign: 'center',
-    marginTop: 5,
+    marginTop: 8,
   },
   formContainer: {
     backgroundColor: 'white',
     borderRadius: 10,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
@@ -238,23 +226,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     fontSize: 16,
   },
-  roleContainer: {
-    marginBottom: 15,
-  },
-  roleLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 5,
-  },
-  pickerContainer: {
-    borderColor: '#e0e0e0',
-    borderWidth: 1,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-  },
-  picker: {
-    height: 50,
-  },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
     marginBottom: 20,
@@ -263,6 +234,13 @@ const styles = StyleSheet.create({
     color: '#4a6da7',
     fontSize: 14,
   },
+  signupNote: {
+    color: '#666',
+    fontSize: 14,
+    marginBottom: 20,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
   authButton: {
     backgroundColor: '#4a6da7',
     borderRadius: 8,
@@ -270,6 +248,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   authButtonText: {
     color: 'white',

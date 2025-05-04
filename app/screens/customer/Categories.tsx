@@ -1,44 +1,96 @@
 // app/screens/customer/Categories.tsx
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, SafeAreaView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { FIREBASE_DB } from '../../../FirebaseConfig';
+import { collection, onSnapshot, query, where, Query, DocumentData, getDocs } from 'firebase/firestore';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  imageUrl: string;
+  category: string;
+  description?: string;
+}
 
 const categoriesData = [
-  { id: '1', name: 'Wine', icon: 'wine', color: '#FF4D4D', backgroundColor: '#FFE8E8' },
-  { id: '2', name: 'Beer', icon: 'beer', color: '#FF9D4D', backgroundColor: '#FFF2E8' },
-  { id: '3', name: 'Spirits', icon: 'wine-outline', color: '#4D79FF', backgroundColor: '#E8F0FF' },
-  { id: '4', name: 'Whiskey', icon: 'cafe', color: '#AA6A3C', backgroundColor: '#F7EBE0' },
-  { id: '5', name: 'Vodka', icon: 'water', color: '#4DACFF', backgroundColor: '#E8F5FF' },
-  { id: '6', name: 'Rum', icon: 'flask', color: '#FF6B4D', backgroundColor: '#FFEDE8' },
-  { id: '7', name: 'Tequila', icon: 'leaf', color: '#4DFF88', backgroundColor: '#E8FFF0' },
-  { id: '8', name: 'Gin', icon: 'flower', color: '#C44DFF', backgroundColor: '#F4E8FF' },
-];
-
-const productsData = [
-  { id: '1', name: 'Red Wine Selection', price: 45.99, image: 'https://via.placeholder.com/150', category: '1' },
-  { id: '2', name: 'Craft Beer Pack', price: 35.99, image: 'https://via.placeholder.com/150', category: '2' },
-  { id: '3', name: 'Premium Vodka', price: 39.99, image: 'https://via.placeholder.com/150', category: '5' },
-  { id: '4', name: 'Single Malt Whiskey', price: 75.99, image: 'https://via.placeholder.com/150', category: '4' },
-  { id: '5', name: 'Jamaican Rum', price: 42.99, image: 'https://via.placeholder.com/150', category: '6' },
-  { id: '6', name: 'London Dry Gin', price: 38.99, image: 'https://via.placeholder.com/150', category: '8' },
+  { id: 'electronics', name: 'Electronics', icon: 'tv-outline' },
+  { id: 'clothing', name: 'Clothing', icon: 'shirt-outline' },
+  { id: 'home', name: 'Home', icon: 'home-outline' },
+  { id: 'food', name: 'Food', icon: 'fast-food-outline' },
+  { id: 'other', name: 'Other', icon: 'grid-outline' },
 ];
 
 const Categories = () => {
-  const [selectedCategory, setSelectedCategory] = useState('1');
-  
-  const filteredProducts = productsData.filter(
-    product => product.category === selectedCategory
-  );
+  const [categories, setCategories] = useState<{id: string, name: string, icon: string}[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  interface Category {
-    id: string;
-    name: string;
-    icon: string;
-    color: string;
-    backgroundColor: string;
-  }
+  const categoryIcons: Record<string, string> = {
+    whiskey: 'cafe-outline',
+    beer: 'beer-outline',
+    rum: 'flask-outline',
+    tequila: 'leaf-outline',
+    gin: 'flower-outline',
+    wine: 'wine-outline',
+    // Add more mappings as needed
+  };
 
-  const renderCategoryItem = ({ item }: { item: Category }) => (
+  useEffect(() => {
+    // Fetch categories from Firestore
+    const fetchCategories = async () => {
+      try {
+        const categoriesRef = collection(FIREBASE_DB, 'categories');
+        const snapshot = await getDocs(categoriesRef);
+        
+        const loadedCategories = snapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.id.charAt(0).toUpperCase() + doc.id.slice(1),
+          icon: categoryIcons[doc.id] || 'grid-outline'
+        }));
+
+        setCategories(loadedCategories);
+        if (loadedCategories.length > 0 && !selectedCategory) {
+          setSelectedCategory(loadedCategories[0].id);
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCategory) return;
+
+    // Fetch products for the selected category
+    const productsRef = collection(FIREBASE_DB, 'products');
+    const q = query(productsRef, where('category', '==', selectedCategory));
+
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const productsList: Product[] = [];
+        snapshot.docs.forEach(doc => {
+          const product = doc.data() as Product;
+          product.id = doc.id;
+          productsList.push(product);
+        });
+        setProducts(productsList);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching products:', error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedCategory]);
+
+  const renderCategoryItem = ({ item }: { item: typeof categoriesData[0] }) => (
     <TouchableOpacity 
       style={[
         styles.categoryItem, 
@@ -46,14 +98,11 @@ const Categories = () => {
       ]}
       onPress={() => setSelectedCategory(item.id)}
     >
-      <View 
-        style={[
-          styles.categoryIcon, 
-          { backgroundColor: item.backgroundColor }
-        ]}
-      >
-        <Ionicons name={item.icon as any} size={24} color={item.color} />
-      </View>
+      <Ionicons 
+        name={item.icon as any} 
+        size={24} 
+        color={selectedCategory === item.id ? 'white' : '#4a6da7'} 
+      />
       <Text 
         style={[
           styles.categoryName,
@@ -65,17 +114,12 @@ const Categories = () => {
     </TouchableOpacity>
   );
 
-  interface Product {
-    id: string;
-    name: string;
-    price: number;
-    image: string;
-    category: string;
-  }
-  
   const renderProductItem = ({ item }: { item: Product }) => (
     <TouchableOpacity style={styles.productCard}>
-      <Image source={{ uri: item.image }} style={styles.productImage} />
+      <Image 
+        source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} 
+        style={styles.productImage} 
+      />
       <Text style={styles.productName}>{item.name}</Text>
       <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
       <TouchableOpacity style={styles.addButton}>
@@ -83,6 +127,14 @@ const Categories = () => {
       </TouchableOpacity>
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#4a6da7" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -108,7 +160,7 @@ const Categories = () => {
         </Text>
         
         <FlatList
-          data={filteredProducts}
+          data={products}
           renderItem={renderProductItem}
           keyExtractor={item => item.id}
           numColumns={2}
@@ -117,7 +169,7 @@ const Categories = () => {
           columnWrapperStyle={styles.productsRow}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="wine" size={60} color="#ccc" />
+              <Ionicons name="grid-outline" size={60} color="#ccc" />
               <Text style={styles.emptyText}>No products found</Text>
             </View>
           }
@@ -127,9 +179,16 @@ const Categories = () => {
   );
 };
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#f5f5f5',
   },
   header: {

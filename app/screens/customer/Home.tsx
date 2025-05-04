@@ -1,26 +1,53 @@
 // app/screens/customer/Home.tsx
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { FIREBASE_DB } from '../../../FirebaseConfig';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 
-const featuredProducts = [
-  { id: '1', name: 'Johnnie Walker Black Label', price: 45.99, image: 'https://via.placeholder.com/150' },
-  { id: '2', name: 'Hennessy V.S', price: 39.99, image: 'https://via.placeholder.com/150' },
-  { id: '3', name: 'Grey Goose Vodka', price: 32.99, image: 'https://via.placeholder.com/150' },
-  { id: '4', name: 'Don Julio Reposado', price: 54.99, image: 'https://via.placeholder.com/150' },
-];
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  imageUrl: string;
+  category: string;
+}
 
 const CustomerHome = () => {
-  interface FeaturedProduct {
-    id: string;
-    name: string;
-    price: number;
-    image: string;
-  }
-  
-  const renderFeaturedItem = ({ item }: { item: FeaturedProduct }) => (
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Get featured products (limit to 4)
+    const productsRef = collection(FIREBASE_DB, 'products');
+    const q = query(productsRef, orderBy('createdAt', 'desc'), limit(4));
+    
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const productsList: Product[] = [];
+        snapshot.docs.forEach(doc => {
+          const product = doc.data() as Product;
+          product.id = doc.id;
+          productsList.push(product);
+        });
+        setFeaturedProducts(productsList);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching featured products:', error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const renderFeaturedItem = ({ item }: { item: Product }) => (
     <TouchableOpacity style={styles.productCard}>
-      <Image source={{ uri: item.image }} style={styles.productImage} />
+      <Image 
+        source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} 
+        style={styles.productImage} 
+      />
       <Text style={styles.productName}>{item.name}</Text>
       <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
       <TouchableOpacity style={styles.addButton}>
@@ -28,6 +55,14 @@ const CustomerHome = () => {
       </TouchableOpacity>
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#4a6da7" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -260,6 +295,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#333',
     fontWeight: '500',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

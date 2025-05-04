@@ -1,12 +1,12 @@
-// App.tsx (modified version)
+// App.tsx with offline handling
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { FIREBASE_AUTH, FIRESTORE_DB, USER_ROLES } from './FirebaseConfig';
-import { ActivityIndicator, View } from 'react-native';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { FIREBASE_AUTH, FIREBASE_DB, USER_ROLES } from './FirebaseConfig';
+import { ActivityIndicator, View, Text, Button } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 // Import screens
@@ -23,11 +23,18 @@ import AdminHome from './app/screens/admin/Home';
 import AdminProfile from './app/screens/admin/Profile';
 import AdminOrders from './app/screens/admin/Orders';
 import AdminDeliveries from './app/screens/admin/Deliveries';
+import AdminProducts from './app/screens/admin/Products';
+import CategoriesManagement from './app/screens/admin/CategoriesManagement';
+
+// Import the standalone AdminNavigator
+import AdminNavigator from './app/screens/navigation/AdminNavigator';
 
 // Delivery screens
 import DeliveryHome from './app/screens/delivery/Home';
 import DeliveryOrders from './app/screens/delivery/Orders';
 import DeliveryProfile from './app/screens/delivery/Profile';
+
+import { User } from 'firebase/auth';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -50,7 +57,7 @@ const CustomerTabNavigator = () => {
             iconName = focused ? 'cart' : 'cart-outline';
           }
 
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={(iconName || 'home-outline') as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#4a6da7',
         tabBarInactiveTintColor: 'gray',
@@ -100,24 +107,29 @@ const AdminTabNavigator = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'AdminHome') {
+          if (route.name === 'Dashboard') {
             iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'AdminProfile') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else if (route.name === 'AdminOrders') {
+          } else if (route.name === 'Orders') {
             iconName = focused ? 'list' : 'list-outline';
-          } else if (route.name === 'AdminDeliveries') {
-            iconName = focused ? 'car' : 'car-outline';
+          } else if (route.name === 'Products') {
+            iconName = focused ? 'cube' : 'cube-outline';
+          } else if (route.name === 'Deliveries') {
+            iconName = focused ? 'bicycle' : 'bicycle-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
+          } else if (route.name === 'Categories') {
+            iconName = focused ? 'pricetags' : 'pricetags-outline';
           }
 
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={(iconName || 'home-outline') as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#4a6da7',
         tabBarInactiveTintColor: 'gray',
+        headerShown: false,
       })}
     >
       <Tab.Screen 
-        name="AdminHome" 
+        name="Dashboard" 
         component={AdminHome} 
         options={{ 
           headerShown: false,
@@ -125,7 +137,7 @@ const AdminTabNavigator = () => {
         }} 
       />
       <Tab.Screen 
-        name="AdminOrders" 
+        name="Orders" 
         component={AdminOrders} 
         options={{ 
           headerShown: false,
@@ -133,7 +145,7 @@ const AdminTabNavigator = () => {
         }} 
       />
       <Tab.Screen 
-        name="AdminDeliveries" 
+        name="Deliveries" 
         component={AdminDeliveries} 
         options={{ 
           headerShown: false,
@@ -141,7 +153,23 @@ const AdminTabNavigator = () => {
         }} 
       />
       <Tab.Screen 
-        name="AdminProfile" 
+        name="Products" 
+        component={AdminProducts} 
+        options={{ 
+          headerShown: false,
+          title: 'Products'
+        }} 
+      />
+      <Tab.Screen 
+        name="Categories" 
+        component={CategoriesManagement} 
+        options={{ 
+          headerShown: false,
+          title: 'Categories'
+        }} 
+      />
+      <Tab.Screen 
+        name="Profile" 
         component={AdminProfile} 
         options={{ 
           headerShown: false,
@@ -168,7 +196,7 @@ const DeliveryTabNavigator = () => {
             iconName = focused ? 'list' : 'list-outline';
           }
 
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={(iconName || 'home-outline') as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#4a6da7',
         tabBarInactiveTintColor: 'gray',
@@ -203,41 +231,43 @@ const DeliveryTabNavigator = () => {
 };
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(FIREBASE_AUTH, async (user) => {
-      setUser(user);
-      
-      if (user) {
-        try {
-          // Get user role from Firestore
-          const userDoc = await getDoc(doc(FIRESTORE_DB, 'users', user.uid));
-          
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUserRole(userData.role);
-          } else {
-            // Default to customer if no role is found
-            setUserRole(USER_ROLES.CUSTOMER);
-          }
-        } catch (error) {
-          console.error('Error fetching user role:', error);
-          // Default to customer on error
-          setUserRole(USER_ROLES.CUSTOMER);
-        }
-      } else {
-        setUserRole(null);
+  // In App.tsx
+useEffect(() => {
+  console.log("Setting up auth state listener");
+  
+  const unsubscribe = onAuthStateChanged(FIREBASE_AUTH, async (currentUser) => {
+    console.log("Auth state changed, current user:", currentUser?.email);
+    
+    if (currentUser) {
+      try {
+        const userDoc = await getDoc(doc(FIREBASE_DB, 'users', currentUser.uid));
+        const userData = userDoc.data();
+        
+        console.log("Firestore user data:", userData);
+        
+        // Update both states TOGETHER
+        setUser(currentUser);
+        setUserRole(userData?.role || 'customer');
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+        setUser(currentUser); // Still set user even if role fetch fails
+        setUserRole('customer');
       }
-      
-      setLoading(false);
-    });
+    } else {
+      // Clear both states TOGETHER
+      setUser(null);
+      setUserRole(null);
+    }
+    setLoading(false);
+  });
 
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, []);
+  return unsubscribe;
+}, []);
 
   if (loading) {
     return (
@@ -247,25 +277,43 @@ export default function App() {
     );
   }
 
+  // Handle network error state
+  if (networkError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Text style={{ fontSize: 18, marginBottom: 20, textAlign: 'center' }}>
+          Unable to connect to the server. Please check your internet connection.
+        </Text>
+        <Button 
+          title="Try Again" 
+          onPress={() => {
+            setLoading(true);
+            // Retry logic - simply setting loading will trigger the useEffect again
+            setTimeout(() => setLoading(false), 1000);
+          }} 
+        />
+      </View>
+    );
+  }
+
+  console.log("Rendering navigation with user:", user ? "logged in" : "logged out");
+  console.log("User role:", userRole);
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
-          // User is signed in, determine which navigator to show based on role
-          <>
-            {userRole === USER_ROLES.CUSTOMER && (
-              <Stack.Screen name="CustomerTabs" component={CustomerTabNavigator} />
-            )}
-            {userRole === USER_ROLES.ADMIN && (
-              <Stack.Screen name="AdminTabs" component={AdminTabNavigator} />
-            )}
-            {userRole === USER_ROLES.DELIVERY && (
-              <Stack.Screen name="DeliveryTabs" component={DeliveryTabNavigator} />
-            )}
-          </>
-        ) : (
+        {!user ? (
           // User is not signed in
           <Stack.Screen name="Login" component={Login} />
+        ) : userRole === USER_ROLES.ADMIN ? (
+          // Admin routes
+          <Stack.Screen name="AdminTabs" component={AdminTabNavigator} />
+        ) : userRole === USER_ROLES.DELIVERY ? (
+          // Delivery routes
+          <Stack.Screen name="DeliveryTabs" component={DeliveryTabNavigator} />
+        ) : (
+          // Default to customer
+          <Stack.Screen name="CustomerTabs" component={CustomerTabNavigator} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
