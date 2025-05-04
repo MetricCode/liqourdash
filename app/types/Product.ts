@@ -1,21 +1,18 @@
-// app/types/Product.ts
-export type LiquorProduct = {
+// types/Product.ts
+import { Timestamp } from 'firebase/firestore';
+
+export type Product = {
   id: string;
   name: string;
   description: string;
   price: number;
-  category: 'whiskey' | 'vodka' | 'rum' | 'tequila' | 'gin' | 'wine' | 'beer' | 'other';
-  subCategory?: string; // e.g., "single malt", "blended", "red", "white"
-  brand: string;
-  alcoholContent: number; // e.g., 40 for 40% ABV
-  volume: number; // in ml
-  countryOfOrigin?: string;
+  category: string;
   imageUrl: string;
   inStock: number;
-  featured?: boolean;
-  ageStatement?: number; // for aged spirits
-  tastingNotes?: string[];
+  alcoholContent?: number;
+  volume?: number;
+  brand?: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
   addedBy?: string;
-  createdAt?: any;
-  updatedAt?: any;
 };
