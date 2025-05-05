@@ -1,4 +1,4 @@
-// App.tsx with added Orders screen
+// App.tsx with DeliveryNavigator
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -17,27 +17,15 @@ import CustomerHome from './app/screens/customer/Home';
 import CustomerProfile from './app/screens/customer/Profile';
 import Categories from './app/screens/customer/Categories';
 import Cart from './app/screens/customer/Cart';
-import Orders from './app/screens/customer/Orders'; // Import the new Orders screen
+import Orders from './app/screens/customer/Orders';
 import Checkout from './app/screens/customer/Checkout';
 import OrderDetails from './app/screens/customer/OrderDetails';
 
-// Admin screens
-import AdminHome from './app/screens/admin/Home';
-import AdminProfile from './app/screens/admin/Profile';
-import AdminOrders from './app/screens/admin/Orders';
-import AdminDeliveries from './app/screens/admin/Deliveries';
-import AdminProducts from './app/screens/admin/Products';
-import CategoriesManagement from './app/screens/admin/CategoriesManagement';
-
-// Import the standalone AdminNavigator
+// Import the standalone navigators
 import AdminNavigator from './app/screens/navigation/AdminNavigator';
+import DeliveryNavigator from './app/screens/navigation/DeliveryNavigator';
 
-// Delivery screens
-import DeliveryHome from './app/screens/delivery/Home';
-import DeliveryOrders from './app/screens/delivery/Orders';
-import DeliveryProfile from './app/screens/delivery/Profile';
-
-// Add the import for the SearchScreen at the top of App.tsx
+// Add the import for the SearchScreen
 import SearchScreen from './app/screens/customer/Search';
 
 import { User } from 'firebase/auth';
@@ -128,137 +116,6 @@ const CustomerTabNavigator = () => {
   );
 };
 
-// Admin Tab Navigator
-const AdminTabNavigator = () => {
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === 'Dashboard') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Orders') {
-            iconName = focused ? 'list' : 'list-outline';
-          } else if (route.name === 'Products') {
-            iconName = focused ? 'cube' : 'cube-outline';
-          } else if (route.name === 'Deliveries') {
-            iconName = focused ? 'bicycle' : 'bicycle-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else if (route.name === 'Categories') {
-            iconName = focused ? 'pricetags' : 'pricetags-outline';
-          }
-
-          return <Ionicons name={(iconName || 'home-outline') as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: '#4a6da7',
-        tabBarInactiveTintColor: 'gray',
-        headerShown: false,
-      })}
-    >
-      <Tab.Screen 
-        name="Dashboard" 
-        component={AdminHome} 
-        options={{ 
-          headerShown: false,
-          title: 'Home'
-        }} 
-      />
-      <Tab.Screen 
-        name="Orders" 
-        component={AdminOrders} 
-        options={{ 
-          headerShown: false,
-          title: 'Orders'
-        }} 
-      />
-      <Tab.Screen 
-        name="Deliveries" 
-        component={AdminDeliveries} 
-        options={{ 
-          headerShown: false,
-          title: 'Deliveries'
-        }} 
-      />
-      <Tab.Screen 
-        name="Products" 
-        component={AdminProducts} 
-        options={{ 
-          headerShown: false,
-          title: 'Products'
-        }} 
-      />
-      <Tab.Screen 
-        name="Categories" 
-        component={CategoriesManagement} 
-        options={{ 
-          headerShown: false,
-          title: 'Categories'
-        }} 
-      />
-      <Tab.Screen 
-        name="Profile" 
-        component={AdminProfile} 
-        options={{ 
-          headerShown: false,
-          title: 'Profile'
-        }} 
-      />
-    </Tab.Navigator>
-  );
-};
-
-// Delivery Tab Navigator
-const DeliveryTabNavigator = () => {
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === 'DeliveryHome') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'DeliveryProfile') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else if (route.name === 'DeliveryOrders') {
-            iconName = focused ? 'list' : 'list-outline';
-          }
-
-          return <Ionicons name={(iconName || 'home-outline') as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: '#4a6da7',
-        tabBarInactiveTintColor: 'gray',
-      })}
-    >
-      <Tab.Screen 
-        name="DeliveryHome" 
-        component={DeliveryHome} 
-        options={{ 
-          headerShown: false,
-          title: 'Home'
-        }} 
-      />
-      <Tab.Screen 
-        name="DeliveryOrders" 
-        component={DeliveryOrders} 
-        options={{ 
-          headerShown: false,
-          title: 'Orders'
-        }} 
-      />
-      <Tab.Screen 
-        name="DeliveryProfile" 
-        component={DeliveryProfile} 
-        options={{ 
-          headerShown: false,
-          title: 'Profile'
-        }} 
-      />
-    </Tab.Navigator>
-  );
-};
-
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -329,22 +186,22 @@ export default function App() {
   console.log("User role:", userRole);
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
-          // User is not signed in
-          <Stack.Screen name="Login" component={Login} />
-        ) : userRole === USER_ROLES.ADMIN ? (
-          // Admin routes
-          <Stack.Screen name="AdminTabs" component={AdminTabNavigator} />
-        ) : userRole === USER_ROLES.DELIVERY ? (
-          // Delivery routes
-          <Stack.Screen name="DeliveryTabs" component={DeliveryTabNavigator} />
-        ) : (
-          // Default to customer - Now using the Stack Navigator that contains tabs + checkout
-          <Stack.Screen name="CustomerMain" component={CustomerStackNavigator} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+  <NavigationContainer>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {!user ? (
+        // User is not signed in
+        <Stack.Screen name="Login" component={Login} />
+      ) : userRole === USER_ROLES.ADMIN ? (
+        // Admin routes - use the standalone AdminNavigator
+        <Stack.Screen name="AdminTabs" component={AdminNavigator} />
+      ) : userRole === USER_ROLES.DELIVERY ? (
+        // Delivery routes - use the standalone DeliveryNavigator
+        <Stack.Screen name="DeliveryTabs" component={DeliveryNavigator} />
+      ) : (
+        // Default to customer - Using the Stack Navigator that contains tabs + checkout
+        <Stack.Screen name="CustomerMain" component={CustomerStackNavigator} />
+      )}
+    </Stack.Navigator>
+  </NavigationContainer>
   );
 }

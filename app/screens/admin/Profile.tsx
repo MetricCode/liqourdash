@@ -13,7 +13,9 @@ import {
   Dimensions,
   Image,
   Platform,
-  Animated
+  Animated,
+  TextInput,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_DB, FIREBASE_AUTH } from '../../../FirebaseConfig';
@@ -27,11 +29,17 @@ import {
   orderBy,
   limit
 } from 'firebase/firestore';
+import { 
+  updatePassword, 
+  EmailAuthProvider, 
+  reauthenticateWithCredential,
+  User 
+} from 'firebase/auth';
 import { NavigationProp } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
-const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
+const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, route: any }) => {
   const [loading, setLoading] = useState(true);
   const [adminName, setAdminName] = useState('Admin');
   const [adminEmail, setAdminEmail] = useState('');
@@ -50,6 +58,15 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
     timestamp: string;
     details: string;
   }[]>([]);
+
+  // Password change modal state
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -120,6 +137,14 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
     loadData();
   }, [fadeAnim, scaleAnim]);
 
+  // Check if route params contain a target section to scroll to
+  useEffect(() => {
+    if (route.params?.section === 'password') {
+      // Open password change modal if directed from home
+      setPasswordModalVisible(true);
+    }
+  }, [route.params]);
+
   const fetchAdminStats = async () => {
     try {
       // Get total products
@@ -130,14 +155,23 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
       // Get total orders
       const ordersRef = collection(FIREBASE_DB, "orders");
       const ordersSnap = await getDocs(ordersRef);
-      const totalOrders = ordersSnap.size;
       
-      // Calculate revenue
+      let totalOrders = 0;
       let revenue = 0;
+      
+      // Process each order
       ordersSnap.forEach(doc => {
         const orderData = doc.data();
-        if (orderData.total) {
-          revenue += orderData.total;
+        
+        // Only count non-cancelled orders for both revenue and order count
+        if (orderData.status?.toLowerCase() !== 'cancelled') {
+          // Add to total orders count
+          totalOrders++;
+          
+          // Add to revenue total
+          if (orderData.total) {
+            revenue += orderData.total;
+          }
         }
       });
       
@@ -152,7 +186,7 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
         totalUsers: totalUsers,
         totalRevenue: revenue
       });
-
+  
     } catch (error) {
       console.error("Error fetching admin stats:", error);
       // Use placeholder data for demo purposes
@@ -291,6 +325,82 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
     navigation.navigate(screen);
   };
 
+  // Handle password change
+  const handleChangePassword = async () => {
+    // Reset states
+    setPasswordError('');
+    setPasswordSuccess(false);
+    setPasswordLoading(true);
+
+    // Validate inputs
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError('All fields are required');
+      setPasswordLoading(false);
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters');
+      setPasswordLoading(false);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match');
+      setPasswordLoading(false);
+      return;
+    }
+
+    try {
+      const user = FIREBASE_AUTH.currentUser;
+      
+      if (!user || !user.email) {
+        throw new Error('User not found');
+      }
+
+      // Reauthenticate with current password
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        currentPassword
+      );
+
+      await reauthenticateWithCredential(user, credential);
+      
+      // Update password
+      await updatePassword(user, newPassword);
+      
+      // Success
+      setPasswordSuccess(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+
+      setTimeout(() => {
+        setPasswordModalVisible(false);
+        setPasswordSuccess(false);
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error changing password:', error);
+      if ((error as any).code === 'auth/wrong-password') {
+        setPasswordError('Current password is incorrect');
+      } else {
+        setPasswordError('Failed to change password. Please try again.');
+      }
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const closePasswordModal = () => {
+    setPasswordModalVisible(false);
+    setPasswordError('');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordSuccess(false);
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -387,9 +497,20 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
             </View>
           </View>
           
-          <TouchableOpacity style={styles.editProfileButton}>
-            <Text style={styles.editProfileText}>Edit Profile</Text>
-          </TouchableOpacity>
+          <View style={styles.profileActionButtons}>
+            <TouchableOpacity style={styles.editProfileButton}>
+              <Ionicons name="create-outline" size={18} color="#4a6da7" style={styles.buttonIcon} />
+              <Text style={styles.editProfileText}>Edit Profile</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.changePasswordButton}
+              onPress={() => setPasswordModalVisible(true)}
+            >
+              <Ionicons name="lock-closed-outline" size={18} color="#4a6da7" style={styles.buttonIcon} />
+              <Text style={styles.editProfileText}>Change Password</Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
         
         <Animated.View 
@@ -404,29 +525,41 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
           <Text style={styles.sectionTitle}>Store Analytics</Text>
           
           <View style={styles.statsGrid}>
-            <View style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}>
+            <TouchableOpacity 
+              style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}
+              onPress={() => navigation.navigate('Products')}
+            >
               <Ionicons name="cube" size={28} color="#1976D2" style={styles.statIcon} />
               <Text style={styles.statValue}>{statsData.productsAdded}</Text>
               <Text style={styles.statLabel}>Products</Text>
-            </View>
+            </TouchableOpacity>
             
-            <View style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}>
+            <TouchableOpacity 
+              style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}
+              onPress={() => navigation.navigate('Orders')}
+            >
               <Ionicons name="list" size={28} color="#388E3C" style={styles.statIcon} />
               <Text style={styles.statValue}>{statsData.ordersProcessed}</Text>
               <Text style={styles.statLabel}>Orders</Text>
-            </View>
+            </TouchableOpacity>
             
-            <View style={[styles.statCard, { backgroundColor: '#F3E5F5' }]}>
+            <TouchableOpacity 
+              style={[styles.statCard, { backgroundColor: '#F3E5F5' }]}
+              onPress={() => { /* Navigate to users section if available */ }}
+            >
               <Ionicons name="people" size={28} color="#7B1FA2" style={styles.statIcon} />
               <Text style={styles.statValue}>{statsData.totalUsers}</Text>
               <Text style={styles.statLabel}>Users</Text>
-            </View>
+            </TouchableOpacity>
             
-            <View style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}>
+            <TouchableOpacity 
+              style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}
+              onPress={() => navigation.navigate('Sales')}
+            >
               <Ionicons name="cash" size={28} color="#E65100" style={styles.statIcon} />
               <Text style={styles.statValue}>${statsData.totalRevenue.toFixed(0)}</Text>
               <Text style={styles.statLabel}>Revenue</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </Animated.View>
         
@@ -451,8 +584,8 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
               key={index}
               style={styles.activityCard}
               onPress={() => {
-                if (activity.type === 'order') handleNavigate('AdminOrders');
-                if (activity.type === 'product') handleNavigate('AdminProducts');
+                if (activity.type === 'order') handleNavigate('Orders');
+                if (activity.type === 'product') handleNavigate('Products');
               }}
             >
               <View style={[
@@ -481,60 +614,6 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
           ))}
         </Animated.View>
         
-        <Animated.View 
-          style={[
-            styles.sectionContainer, 
-            { 
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          
-          <View style={styles.quickActionsGrid}>
-            <TouchableOpacity 
-              style={styles.quickActionCard}
-              onPress={() => handleNavigate('AdminProducts')}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="cube" size={24} color="#1976D2" />
-              </View>
-              <Text style={styles.quickActionText}>Products</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickActionCard}
-              onPress={() => handleNavigate('AdminOrders')}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="list" size={24} color="#388E3C" />
-              </View>
-              <Text style={styles.quickActionText}>Orders</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickActionCard}
-              onPress={() => handleNavigate('CategoriesManagement')}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#F3E5F5' }]}>
-                <Ionicons name="pricetag" size={24} color="#7B1FA2" />
-              </View>
-              <Text style={styles.quickActionText}>Categories</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickActionCard}
-              onPress={() => handleNavigate('AdminDeliveries')}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="car" size={24} color="#E65100" />
-              </View>
-              <Text style={styles.quickActionText}>Deliveries</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-        
         <TouchableOpacity 
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -545,6 +624,99 @@ const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
         
         <Text style={styles.versionText}>LiquorDash Admin v1.0.0</Text>
       </ScrollView>
+
+      {/* Password Change Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={passwordModalVisible}
+        onRequestClose={closePasswordModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Change Password</Text>
+              <TouchableOpacity 
+                style={styles.modalCloseButton} 
+                onPress={closePasswordModal}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {passwordSuccess ? (
+              <View style={styles.successContainer}>
+                <Ionicons name="checkmark-circle" size={60} color="#4CAF50" />
+                <Text style={styles.successText}>Password changed successfully!</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.modalDescription}>Please enter your current password and choose a new password</Text>
+                
+                {passwordError ? (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{passwordError}</Text>
+                  </View>
+                ) : null}
+                
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Current Password</Text>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter current password"
+                      secureTextEntry={true}
+                      value={currentPassword}
+                      onChangeText={setCurrentPassword}
+                    />
+                  </View>
+                </View>
+                
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>New Password</Text>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="key-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter new password"
+                      secureTextEntry={true}
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                    />
+                  </View>
+                </View>
+                
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Confirm New Password</Text>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="key-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Confirm new password"
+                      secureTextEntry={true}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                    />
+                  </View>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.modalButton}
+                  onPress={handleChangePassword}
+                  disabled={passwordLoading}
+                >
+                  {passwordLoading ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Change Password</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -730,22 +902,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     marginHorizontal: 15,
   },
+  profileActionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
   editProfileButton: {
     backgroundColor: 'white',
     borderRadius: 12,
     paddingVertical: 14,
+    paddingHorizontal: 15,
     alignItems: 'center',
-    marginTop: 15,
+    flex: 0.48,
+    flexDirection: 'row',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
   },
+  changePasswordButton: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    flex: 0.48,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
   editProfileText: {
     color: '#4a6da7',
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 14,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -876,6 +1074,108 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 12,
     marginBottom: 10,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    width: width * 0.9,
+    maxWidth: 400,
+    borderRadius: 15,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalCloseButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f9f9f9',
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+  },
+  modalButton: {
+    backgroundColor: '#4a6da7',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  errorContainer: {
+    backgroundColor: '#FFEBEE',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#D32F2F',
+    fontSize: 14,
+  },
+  successContainer: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  successText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#388E3C',
+    marginTop: 15,
   }
 });
 

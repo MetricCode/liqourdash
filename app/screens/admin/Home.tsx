@@ -141,24 +141,33 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
     try {
       setLoadingStats(true);
       
-      // Get total sales and orders
+      // Get orders and calculate stats
       const ordersRef = collection(FIREBASE_DB, 'orders');
       const ordersSnapshot = await getDocs(ordersRef);
       
       let totalSales = 0;
-      let totalOrders = 0;
+      let totalPendingOrders = 0;
       let pendingDeliveries = 0;
       
       ordersSnapshot.forEach(doc => {
         const orderData = doc.data();
-        totalOrders++;
+        const status = orderData.status || '';
         
-        if (orderData.total) {
-          totalSales += orderData.total;
-        }
-        
-        if (orderData.status === 'pending' || orderData.status === 'processing') {
-          pendingDeliveries++;
+        // Only count non-cancelled orders
+        if (status.toLowerCase() !== 'cancelled') {
+          // Add to sales total only for non-cancelled orders
+          if (orderData.total) {
+            totalSales += orderData.total;
+          }
+          
+          // Count pending or processing orders for pending deliveries
+          if (status.toLowerCase() === 'pending' || status.toLowerCase() === 'processing') {
+            pendingDeliveries++;
+            totalPendingOrders++;
+          } else if (status.toLowerCase() !== 'cancelled') {
+            // Count completed/delivered orders for total orders (but not cancelled)
+            totalPendingOrders++;
+          }
         }
       });
       
@@ -169,7 +178,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
       
       setStats({
         totalSales,
-        totalOrders,
+        totalOrders: totalPendingOrders,
         pendingDeliveries,
         outOfStock: outOfStockSnapshot.size
       });
@@ -311,11 +320,13 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
   };
   
   const navigateToOrderDetails = (orderId: string) => {
-    navigation.navigate('AdminOrders', { orderId });
+    // Navigate to the Orders tab first, then pass parameters
+    navigation.navigate('Orders', { orderId });
   };
   
   const navigateToProductDetails = (productId: string, action?: string) => {
-    navigation.navigate('AdminProducts', { productId, action });
+    // Navigate to the Products tab first, then pass parameters
+    navigation.navigate('Products', { productId, action });
   };
 
   return (
@@ -338,7 +349,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.headerButton}
-            onPress={() => navigation.navigate('AdminProfile')}
+            onPress={() => navigation.navigate('Profile')}
           >
             <Ionicons name="person-outline" size={24} color="#4a6da7" />
           </TouchableOpacity>
@@ -377,7 +388,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
             <View style={styles.statsContainer}>
               <TouchableOpacity 
                 style={[styles.statCard, { backgroundColor: '#e8f5e9' }]}
-                onPress={() => navigation.navigate('AdminOrders')}
+                onPress={() => navigation.navigate('Sales')}
               >
                 <Text style={styles.statValue}>${stats.totalSales.toFixed(2)}</Text>
                 <Text style={styles.statLabel}>Total Sales</Text>
@@ -386,7 +397,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
               
               <TouchableOpacity 
                 style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}
-                onPress={() => navigation.navigate('AdminOrders')}
+                onPress={() => navigation.navigate('Orders')}
               >
                 <Text style={styles.statValue}>{stats.totalOrders}</Text>
                 <Text style={styles.statLabel}>Total Orders</Text>
@@ -395,7 +406,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
               
               <TouchableOpacity 
                 style={[styles.statCard, { backgroundColor: '#fff3e0' }]}
-                onPress={() => navigation.navigate('AdminDeliveries')}
+                onPress={() => navigation.navigate('Deliveries')}
               >
                 <Text style={styles.statValue}>{stats.pendingDeliveries}</Text>
                 <Text style={styles.statLabel}>Pending Deliveries</Text>
@@ -404,7 +415,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
               
               <TouchableOpacity 
                 style={[styles.statCard, { backgroundColor: '#ffebee' }]}
-                onPress={() => navigation.navigate('AdminProducts')}
+                onPress={() => navigation.navigate('Products', { filter: 'outOfStock' })}
               >
                 <Text style={styles.statValue}>{stats.outOfStock}</Text>
                 <Text style={styles.statLabel}>Out of Stock</Text>
@@ -417,15 +428,12 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
         <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>View All</Text>
-            </TouchableOpacity>
           </View>
           
           <View style={styles.actionsContainer}>
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('AdminProducts', { action: 'add' })}
+              onPress={() => navigation.navigate('Products', { action: 'add' })}
             >
               <View style={[styles.actionIcon, { backgroundColor: '#e3f2fd' }]}>
                 <Ionicons name="add-circle-outline" size={24} color="#1976d2" />
@@ -435,7 +443,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
             
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('CategoriesManagement')}
+              onPress={() => navigation.navigate('Categories')}
             >
               <View style={[styles.actionIcon, { backgroundColor: '#f3e5f5' }]}>
                 <Ionicons name="pricetag-outline" size={24} color="#7b1fa2" />
@@ -445,7 +453,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
             
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('AdminOrders')}
+              onPress={() => navigation.navigate('Orders')}
             >
               <View style={[styles.actionIcon, { backgroundColor: '#e8f5e9' }]}>
                 <Ionicons name="list-outline" size={24} color="#388e3c" />
@@ -455,7 +463,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
             
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('AdminDeliveries')}
+              onPress={() => navigation.navigate('Deliveries')}
             >
               <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
                 <Ionicons name="car-outline" size={24} color="#f57c00" />
@@ -466,12 +474,12 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Orders</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AdminOrders')}>
-              <Text style={styles.seeAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Orders</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Orders')}>
+            <Text style={styles.seeAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
           
           {loadingOrders ? (
             <View style={styles.loadingContainer}>
@@ -589,7 +597,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
               {recentOrders.length > 0 && (
                 <TouchableOpacity 
                   style={styles.viewAllButton}
-                  onPress={() => navigation.navigate('AdminOrders')}
+                  onPress={() => navigation.navigate('Orders')}
                 >
                   <Text style={styles.viewAllText}>View All Orders</Text>
                   <Ionicons name="arrow-forward" size={18} color="#4a6da7" />
@@ -602,6 +610,18 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
     </SafeAreaView>
   );
 };
+
+
+
+
+
+
+
+
+
+
+
+
 
 const styles = StyleSheet.create({
   container: {
