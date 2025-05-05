@@ -1,4 +1,4 @@
-// App.tsx with offline handling
+// App.tsx with added Orders screen
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -17,6 +17,9 @@ import CustomerHome from './app/screens/customer/Home';
 import CustomerProfile from './app/screens/customer/Profile';
 import Categories from './app/screens/customer/Categories';
 import Cart from './app/screens/customer/Cart';
+import Orders from './app/screens/customer/Orders'; // Import the new Orders screen
+import Checkout from './app/screens/customer/Checkout';
+import OrderDetails from './app/screens/customer/OrderDetails';
 
 // Admin screens
 import AdminHome from './app/screens/admin/Home';
@@ -34,10 +37,26 @@ import DeliveryHome from './app/screens/delivery/Home';
 import DeliveryOrders from './app/screens/delivery/Orders';
 import DeliveryProfile from './app/screens/delivery/Profile';
 
+// Add the import for the SearchScreen at the top of App.tsx
+import SearchScreen from './app/screens/customer/Search';
+
 import { User } from 'firebase/auth';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const CustomerStack = createNativeStackNavigator();
+
+// Customer Stack Navigator (for nested navigation)
+const CustomerStackNavigator = () => {
+  return (
+    <CustomerStack.Navigator screenOptions={{ headerShown: false }}>
+      <CustomerStack.Screen name="CustomerTabs" component={CustomerTabNavigator} />
+      <CustomerStack.Screen name="Checkout" component={Checkout} />
+      <CustomerStack.Screen name="OrderDetails" component={OrderDetails} />
+      <CustomerStack.Screen name="Search" component={SearchScreen} />
+    </CustomerStack.Navigator>
+  );
+};
 
 // Customer Tab Navigator
 const CustomerTabNavigator = () => {
@@ -55,6 +74,8 @@ const CustomerTabNavigator = () => {
             iconName = focused ? 'grid' : 'grid-outline';
           } else if (route.name === 'Cart') {
             iconName = focused ? 'cart' : 'cart-outline';
+          } else if (route.name === 'Orders') {
+            iconName = focused ? 'receipt' : 'receipt-outline';
           }
 
           return <Ionicons name={(iconName || 'home-outline') as keyof typeof Ionicons.glyphMap} size={size} color={color} />;
@@ -85,6 +106,14 @@ const CustomerTabNavigator = () => {
         options={{ 
           headerShown: false,
           title: 'Cart'
+        }} 
+      />
+      <Tab.Screen 
+        name="Orders" 
+        component={Orders} 
+        options={{ 
+          headerShown: false,
+          title: 'Orders'
         }} 
       />
       <Tab.Screen 
@@ -237,37 +266,37 @@ export default function App() {
   const [networkError, setNetworkError] = useState(false);
 
   // In App.tsx
-useEffect(() => {
-  console.log("Setting up auth state listener");
-  
-  const unsubscribe = onAuthStateChanged(FIREBASE_AUTH, async (currentUser) => {
-    console.log("Auth state changed, current user:", currentUser?.email);
+  useEffect(() => {
+    console.log("Setting up auth state listener");
     
-    if (currentUser) {
-      try {
-        const userDoc = await getDoc(doc(FIREBASE_DB, 'users', currentUser.uid));
-        const userData = userDoc.data();
-        
-        console.log("Firestore user data:", userData);
-        
-        // Update both states TOGETHER
-        setUser(currentUser);
-        setUserRole(userData?.role || 'customer');
-      } catch (error) {
-        console.error("Error fetching user role:", error);
-        setUser(currentUser); // Still set user even if role fetch fails
-        setUserRole('customer');
+    const unsubscribe = onAuthStateChanged(FIREBASE_AUTH, async (currentUser) => {
+      console.log("Auth state changed, current user:", currentUser?.email);
+      
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(FIREBASE_DB, 'users', currentUser.uid));
+          const userData = userDoc.data();
+          
+          console.log("Firestore user data:", userData);
+          
+          // Update both states TOGETHER
+          setUser(currentUser);
+          setUserRole(userData?.role || 'customer');
+        } catch (error) {
+          console.error("Error fetching user role:", error);
+          setUser(currentUser); // Still set user even if role fetch fails
+          setUserRole('customer');
+        }
+      } else {
+        // Clear both states TOGETHER
+        setUser(null);
+        setUserRole(null);
       }
-    } else {
-      // Clear both states TOGETHER
-      setUser(null);
-      setUserRole(null);
-    }
-    setLoading(false);
-  });
+      setLoading(false);
+    });
 
-  return unsubscribe;
-}, []);
+    return unsubscribe;
+  }, []);
 
   if (loading) {
     return (
@@ -312,8 +341,8 @@ useEffect(() => {
           // Delivery routes
           <Stack.Screen name="DeliveryTabs" component={DeliveryTabNavigator} />
         ) : (
-          // Default to customer
-          <Stack.Screen name="CustomerTabs" component={CustomerTabNavigator} />
+          // Default to customer - Now using the Stack Navigator that contains tabs + checkout
+          <Stack.Screen name="CustomerMain" component={CustomerStackNavigator} />
         )}
       </Stack.Navigator>
     </NavigationContainer>

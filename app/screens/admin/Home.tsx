@@ -12,7 +12,8 @@ import {
   Alert,
   StatusBar,
   Dimensions,
-  RefreshControl
+  RefreshControl,
+  Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_DB, FIREBASE_AUTH } from '../../../FirebaseConfig';
@@ -21,17 +22,24 @@ import {
   getDocs, 
   query, 
   where, 
-  orderBy, 
+  orderBy,
   limit,
   getDoc,
-  doc
+  doc,
+  updateDoc,
+  Timestamp
 } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
-import { NavigationProp } from '@react-navigation/native';
+import { NavigationProp, useIsFocused } from '@react-navigation/native';
 
 const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
+  // Animation values
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [headerScaleAnim] = useState(new Animated.Value(0.95));
+  const [cardsScaleAnim] = useState(new Animated.Value(0.97));
+  
   // Stats state
   const [stats, setStats] = useState({
     totalSales: 0,
@@ -50,14 +58,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
     status: string;
     date: string;
   }[]>([]);
-  const [lowStockProducts, setLowStockProducts] = useState<{ 
-    id: string; 
-    name: string; 
-    stock: number; 
-    price: number; 
-    category: string; 
-    imageUrl: string; 
-  }[]>([]);
+  
   
   // Loading states
   const [loadingStats, setLoadingStats] = useState(true);
@@ -70,12 +71,42 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
   // Get admin name
   const [adminName, setAdminName] = useState('');
   
+  // Check if screen is focused
+  const isFocused = useIsFocused();
+  
+  // Handle animations
+  useEffect(() => {
+    if (isFocused) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true
+        }),
+        Animated.timing(headerScaleAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true
+        }),
+        Animated.timing(cardsScaleAnim, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true
+        })
+      ]).start();
+    } else {
+      // Reset animations when screen loses focus
+      fadeAnim.setValue(0);
+      headerScaleAnim.setValue(0.95);
+      cardsScaleAnim.setValue(0.97);
+    }
+  }, [isFocused, fadeAnim, headerScaleAnim, cardsScaleAnim]);
+  
   // Fetch all data
   const fetchAllData = useCallback(async () => {
     await fetchAdminName();
     await fetchStats();
     await fetchRecentOrders();
-    await fetchLowStockProducts();
   }, []);
   
   // Pull-to-refresh function
@@ -93,7 +124,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
   
   useEffect(() => {
     fetchAllData();
-  }, [fetchAllData]);
+  }, [fetchAllData, isFocused]);
   
   const fetchAdminName = async () => {
     const user = FIREBASE_AUTH.currentUser;
@@ -148,7 +179,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
       console.error('Error fetching stats:', error);
       setLoadingStats(false);
       
-      // For demo purposes, set some default stats
+      // For demo purposes, set some default stats if real data fails
       setStats({
         totalSales: 12580.45,
         totalOrders: 156,
@@ -232,79 +263,6 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
     }
   };
   
-  const fetchLowStockProducts = async () => {
-    try {
-      setLoadingProducts(true);
-      
-      const productsRef = collection(FIREBASE_DB, 'products');
-      const lowStockQuery = query(
-        productsRef, 
-        where('inStock', '>', 0),
-        where('inStock', '<=', 5),
-        limit(4)
-      );
-      
-      const snapshot = await getDocs(lowStockQuery);
-      const products = [];
-      
-      for (const productDoc of snapshot.docs) {
-        const productData = productDoc.data();
-        
-        // Get category name
-        let categoryName = 'Uncategorized';
-        if (productData.category) {
-          const categoryDoc = await getDoc(doc(FIREBASE_DB, 'categories', productData.category));
-          if (categoryDoc.exists()) {
-            categoryName = categoryDoc.data().name || productData.category;
-          }
-        }
-        
-        products.push({
-          id: productDoc.id,
-          name: productData.name,
-          stock: productData.inStock,
-          price: productData.price,
-          category: categoryName,
-          imageUrl: productData.imageUrl
-        });
-      }
-      
-      setLowStockProducts(products);
-      setLoadingProducts(false);
-    } catch (error) {
-      console.error('Error fetching low stock products:', error);
-      setLoadingProducts(false);
-      
-      // For demo purposes
-      setLowStockProducts([
-        {
-          id: '1',
-          name: 'Johnnie Walker Black Label',
-          stock: 3,
-          price: 45.99,
-          category: 'Whiskey',
-          imageUrl: 'https://via.placeholder.com/150'
-        },
-        {
-          id: '2',
-          name: 'Grey Goose Vodka',
-          stock: 2,
-          price: 39.99,
-          category: 'Vodka',
-          imageUrl: 'https://via.placeholder.com/150'
-        },
-        {
-          id: '3',
-          name: 'Hennessy XO',
-          stock: 1,
-          price: 199.99,
-          category: 'Cognac',
-          imageUrl: 'https://via.placeholder.com/150'
-        }
-      ]);
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
@@ -320,12 +278,59 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
         return { bg: '#f5f5f5', text: '#757575' };
     }
   };
+  
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      setLoadingOrders(true);
+      
+      // Update the order status in Firestore
+      const orderRef = doc(FIREBASE_DB, 'orders', orderId);
+      await updateDoc(orderRef, {
+        status: newStatus,
+        updatedAt: Timestamp.now()
+      });
+      
+      // Update the local state to reflect the change
+      setRecentOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId ? { ...order, status: newStatus } : order
+        )
+      );
+      
+      Alert.alert('Success', `Order status updated to ${newStatus}`);
+      
+      // Refresh data
+      await fetchRecentOrders();
+      await fetchStats();
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      Alert.alert('Error', 'Failed to update order status. Please try again.');
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+  
+  const navigateToOrderDetails = (orderId: string) => {
+    navigation.navigate('AdminOrders', { orderId });
+  };
+  
+  const navigateToProductDetails = (productId: string, action?: string) => {
+    navigation.navigate('AdminProducts', { productId, action });
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
       
-      <View style={styles.header}>
+      <Animated.View 
+        style={[
+          styles.header,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: headerScaleAnim }]
+          }
+        ]}
+      >
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Admin Dashboard</Text>
           {adminName && <Text style={styles.welcomeText}>Welcome, {adminName}</Text>}
@@ -337,11 +342,14 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
           >
             <Ionicons name="person-outline" size={24} color="#4a6da7" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => Alert.alert('Notifications', 'You have no new notifications')}
+          >
             <Ionicons name="notifications-outline" size={24} color="#4a6da7" />
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView 
         contentContainerStyle={styles.content}
@@ -357,267 +365,239 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
           />
         }
       >
-        <Text style={styles.sectionTitle}>Overview</Text>
-        
-        {loadingStats ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#4a6da7" />
-            <Text style={styles.loadingText}>Loading stats...</Text>
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          
+          {loadingStats ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#4a6da7" />
+              <Text style={styles.loadingText}>Loading stats...</Text>
+            </View>
+          ) : (
+            <View style={styles.statsContainer}>
+              <TouchableOpacity 
+                style={[styles.statCard, { backgroundColor: '#e8f5e9' }]}
+                onPress={() => navigation.navigate('AdminOrders')}
+              >
+                <Text style={styles.statValue}>${stats.totalSales.toFixed(2)}</Text>
+                <Text style={styles.statLabel}>Total Sales</Text>
+                <Ionicons name="cash-outline" size={24} color="#388e3c" style={styles.statIcon} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}
+                onPress={() => navigation.navigate('AdminOrders')}
+              >
+                <Text style={styles.statValue}>{stats.totalOrders}</Text>
+                <Text style={styles.statLabel}>Total Orders</Text>
+                <Ionicons name="list-outline" size={24} color="#1976d2" style={styles.statIcon} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.statCard, { backgroundColor: '#fff3e0' }]}
+                onPress={() => navigation.navigate('AdminDeliveries')}
+              >
+                <Text style={styles.statValue}>{stats.pendingDeliveries}</Text>
+                <Text style={styles.statLabel}>Pending Deliveries</Text>
+                <Ionicons name="car-outline" size={24} color="#f57c00" style={styles.statIcon} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.statCard, { backgroundColor: '#ffebee' }]}
+                onPress={() => navigation.navigate('AdminProducts')}
+              >
+                <Text style={styles.statValue}>{stats.outOfStock}</Text>
+                <Text style={styles.statLabel}>Out of Stock</Text>
+                <Ionicons name="alert-circle-outline" size={24} color="#c62828" style={styles.statIcon} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </Animated.View>
+
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAllText}>View All</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.statsContainer}>
+          
+          <View style={styles.actionsContainer}>
             <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#e8f5e9' }]}
-              onPress={() => navigation.navigate('AdminOrders')}
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('AdminProducts', { action: 'add' })}
             >
-              <Text style={styles.statValue}>${stats.totalSales.toFixed(2)}</Text>
-              <Text style={styles.statLabel}>Total Sales</Text>
-              <Ionicons name="cash-outline" size={24} color="#388e3c" style={styles.statIcon} />
+              <View style={[styles.actionIcon, { backgroundColor: '#e3f2fd' }]}>
+                <Ionicons name="add-circle-outline" size={24} color="#1976d2" />
+              </View>
+              <Text style={styles.actionText}>Add Product</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}
-              onPress={() => navigation.navigate('AdminOrders')}
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('CategoriesManagement')}
             >
-              <Text style={styles.statValue}>{stats.totalOrders}</Text>
-              <Text style={styles.statLabel}>Total Orders</Text>
-              <Ionicons name="list-outline" size={24} color="#1976d2" style={styles.statIcon} />
+              <View style={[styles.actionIcon, { backgroundColor: '#f3e5f5' }]}>
+                <Ionicons name="pricetag-outline" size={24} color="#7b1fa2" />
+              </View>
+              <Text style={styles.actionText}>Categories</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#fff3e0' }]}
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('AdminOrders')}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: '#e8f5e9' }]}>
+                <Ionicons name="list-outline" size={24} color="#388e3c" />
+              </View>
+              <Text style={styles.actionText}>Orders</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.actionButton}
               onPress={() => navigation.navigate('AdminDeliveries')}
             >
-              <Text style={styles.statValue}>{stats.pendingDeliveries}</Text>
-              <Text style={styles.statLabel}>Pending Deliveries</Text>
-              <Ionicons name="car-outline" size={24} color="#f57c00" style={styles.statIcon} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#ffebee' }]}
-              onPress={() => navigation.navigate('AdminProducts')}
-            >
-              <Text style={styles.statValue}>{stats.outOfStock}</Text>
-              <Text style={styles.statLabel}>Out of Stock</Text>
-              <Ionicons name="alert-circle-outline" size={24} color="#c62828" style={styles.statIcon} />
+              <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
+                <Ionicons name="car-outline" size={24} color="#f57c00" />
+              </View>
+              <Text style={styles.actionText}>Deliveries</Text>
             </TouchableOpacity>
           </View>
-        )}
+        </Animated.View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('AdminProducts')}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: '#e3f2fd' }]}>
-              <Ionicons name="add-circle-outline" size={24} color="#1976d2" />
-            </View>
-            <Text style={styles.actionText}>Add Product</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('CategoriesManagement')}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: '#f3e5f5' }]}>
-              <Ionicons name="pricetag-outline" size={24} color="#7b1fa2" />
-            </View>
-            <Text style={styles.actionText}>Categories</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('AdminOrders')}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: '#e8f5e9' }]}>
-              <Ionicons name="list-outline" size={24} color="#388e3c" />
-            </View>
-            <Text style={styles.actionText}>Orders</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('AdminDeliveries')}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
-              <Ionicons name="car-outline" size={24} color="#f57c00" />
-            </View>
-            <Text style={styles.actionText}>Deliveries</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Orders</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('AdminOrders')}>
-            <Text style={styles.seeAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {loadingOrders ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#4a6da7" />
-            <Text style={styles.loadingText}>Loading orders...</Text>
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Orders</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('AdminOrders')}>
+              <Text style={styles.seeAllText}>View All</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.ordersContainer}>
-            {recentOrders.map((order, index) => {
-              const statusStyle = getStatusColor(order.status);
+          
+          {loadingOrders ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#4a6da7" />
+              <Text style={styles.loadingText}>Loading orders...</Text>
+            </View>
+          ) : (
+            <View style={styles.ordersContainer}>
+              {recentOrders.length === 0 ? (
+                <View style={styles.emptyStateContainer}>
+                  <Ionicons name="receipt-outline" size={60} color="#ddd" />
+                  <Text style={styles.emptyStateText}>No recent orders</Text>
+                  <Text style={styles.emptyStateSubtext}>New orders will appear here</Text>
+                </View>
+              ) : (
+                recentOrders.map((order, index) => {
+                  const statusStyle = getStatusColor(order.status);
+                  
+                  return (
+                    <TouchableOpacity 
+                      key={order.id} 
+                      style={[
+                        styles.orderCard,
+                        index === recentOrders.length - 1 && { marginBottom: 5 }
+                      ]}
+                      onPress={() => navigateToOrderDetails(order.id)}
+                    >
+                      <View style={styles.orderHeader}>
+                        <Text style={styles.orderNumber}>Order #{order.orderNumber}</Text>
+                        <View style={[styles.orderStatus, { backgroundColor: statusStyle.bg }]}>
+                          <Text style={[styles.orderStatusText, { color: statusStyle.text }]}>
+                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          </Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.orderDetails}>
+                        <Text style={styles.orderDetail}>
+                          <Text style={styles.orderDetailLabel}>Customer: </Text>
+                          {order.customerName}
+                        </Text>
+                        <Text style={styles.orderDetail}>
+                          <Text style={styles.orderDetailLabel}>Total: </Text>
+                          ${order.total.toFixed(2)}
+                        </Text>
+                        <Text style={styles.orderDetail}>
+                          <Text style={styles.orderDetailLabel}>Items: </Text>
+                          {order.items}
+                        </Text>
+                        <Text style={styles.orderDetail}>
+                          <Text style={styles.orderDetailLabel}>Date: </Text>
+                          {order.date}
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.orderActions}>
+                        <TouchableOpacity 
+                          style={styles.orderActionButton}
+                          onPress={() => navigateToOrderDetails(order.id)}
+                        >
+                          <Text style={styles.orderActionText}>View Details</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={[styles.orderActionButton, styles.orderActionButtonSecondary]}
+                          onPress={() => {
+                            if (order.status === 'pending') {
+                              Alert.alert(
+                                'Update Status', 
+                                'This will mark the order as processing. Continue?', 
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { 
+                                    text: 'Update', 
+                                    onPress: () => handleUpdateOrderStatus(order.id, 'processing')
+                                  }
+                                ]
+                              );
+                            } else if (order.status === 'processing') {
+                              Alert.alert(
+                                'Update Status', 
+                                'This will mark the order as delivered. Continue?', 
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { 
+                                    text: 'Update', 
+                                    onPress: () => handleUpdateOrderStatus(order.id, 'delivered')
+                                  }
+                                ]
+                              );
+                            } else {
+                              Alert.alert(
+                                'Print Receipt', 
+                                'Print receipt for order #' + order.orderNumber,
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: 'Print', onPress: () => console.log('Print receipt') }
+                                ]
+                              );
+                            }
+                          }}
+                        >
+                          <Text style={styles.orderActionTextSecondary}>
+                            {order.status === 'pending' ? 'Process Order' : 
+                             order.status === 'processing' ? 'Mark Delivered' : 
+                             'Print Receipt'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
               
-              return (
+              {recentOrders.length > 0 && (
                 <TouchableOpacity 
-                  key={order.id} 
-                  style={styles.orderCard}
-                  onPress={() => navigation.navigate('AdminOrders', { orderId: order.id })}
+                  style={styles.viewAllButton}
+                  onPress={() => navigation.navigate('AdminOrders')}
                 >
-                  <View style={styles.orderHeader}>
-                    <Text style={styles.orderNumber}>Order #{order.orderNumber}</Text>
-                    <View style={[styles.orderStatus, { backgroundColor: statusStyle.bg }]}>
-                      <Text style={[styles.orderStatusText, { color: statusStyle.text }]}>
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.orderDetails}>
-                    <Text style={styles.orderDetail}>
-                      <Text style={styles.orderDetailLabel}>Customer: </Text>
-                      {order.customerName}
-                    </Text>
-                    <Text style={styles.orderDetail}>
-                      <Text style={styles.orderDetailLabel}>Total: </Text>
-                      ${order.total.toFixed(2)}
-                    </Text>
-                    <Text style={styles.orderDetail}>
-                      <Text style={styles.orderDetailLabel}>Items: </Text>
-                      {order.items}
-                    </Text>
-                    <Text style={styles.orderDetail}>
-                      <Text style={styles.orderDetailLabel}>Date: </Text>
-                      {order.date}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.orderActions}>
-                    <TouchableOpacity 
-                      style={styles.orderActionButton}
-                      onPress={() => navigation.navigate('AdminOrders', { orderId: order.id })}
-                    >
-                      <Text style={styles.orderActionText}>View Details</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.orderActionButton, styles.orderActionButtonSecondary]}
-                      onPress={() => 
-                        order.status === 'pending' ? 
-                          Alert.alert('Update Status', 'This will mark the order as processing. Continue?', [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Update', 
-                              onPress: () => {
-                                // Process order logic would go here
-                                Alert.alert('Success', 'Order status updated to processing');
-                              }
-                            }
-                          ]) 
-                        : order.status === 'processing' ?
-                          Alert.alert('Update Status', 'This will mark the order as delivered. Continue?', [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Update', 
-                              onPress: () => {
-                                // Deliver order logic would go here
-                                Alert.alert('Success', 'Order status updated to delivered');
-                              }
-                            }
-                          ])
-                        : Alert.alert('Print Receipt', 'Print receipt for order #' + order.orderNumber)
-                      }
-                    >
-                      <Text style={styles.orderActionTextSecondary}>
-                        {order.status === 'pending' ? 'Process Order' : 
-                         order.status === 'processing' ? 'Mark Delivered' : 
-                         'Print Receipt'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                  <Text style={styles.viewAllText}>View All Orders</Text>
+                  <Ionicons name="arrow-forward" size={18} color="#4a6da7" />
                 </TouchableOpacity>
-              );
-            })}
-            
-            <TouchableOpacity 
-              style={styles.viewAllButton}
-              onPress={() => navigation.navigate('AdminOrders')}
-            >
-              <Text style={styles.viewAllText}>View All Orders</Text>
-              <Ionicons name="arrow-forward" size={18} color="#4a6da7" />
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Low Stock Products</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('AdminProducts')}>
-            <Text style={styles.seeAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {loadingProducts ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#4a6da7" />
-            <Text style={styles.loadingText}>Loading products...</Text>
-          </View>
-        ) : (
-          <ScrollView 
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.productsScrollView}
-          >
-            {lowStockProducts.map(product => (
-              <TouchableOpacity 
-                key={product.id} 
-                style={styles.productCard}
-                onPress={() => navigation.navigate('AdminProducts', { productId: product.id })}
-              >
-                <View style={styles.productImageContainer}>
-                  <Image 
-                    source={{ uri: product.imageUrl }} 
-                    style={styles.productImage}
-                    defaultSource={{ uri: 'https://via.placeholder.com/150' }}
-                  />
-                  <View style={styles.stockBadge}>
-                    <Text style={styles.stockText}>Stock: {product.stock}</Text>
-                  </View>
-                </View>
-                <View style={styles.productDetails}>
-                  <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
-                  <Text style={styles.productCategory}>{product.category}</Text>
-                  <Text style={styles.productPrice}>${product.price.toFixed(2)}</Text>
-                </View>
-                <TouchableOpacity 
-                  style={styles.updateStockButton}
-                  onPress={() => navigation.navigate('AdminProducts', { 
-                    productId: product.id,
-                    action: 'update-stock'
-                  })}
-                >
-                  <Text style={styles.updateStockText}>Update Stock</Text>
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity 
-              style={styles.viewMoreProductsCard}
-              onPress={() => navigation.navigate('AdminProducts')}
-            >
-              <Ionicons name="arrow-forward-circle" size={40} color="#4a6da7" />
-              <Text style={styles.viewMoreText}>View All Products</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
+              )}
+            </View>
+          )}
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -637,6 +617,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 3,
   },
   headerTitleContainer: {
     flex: 1,
@@ -872,15 +857,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: '#ffebee',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
   },
+  lowStockBadge: {
+    backgroundColor: '#fff3e0',
+  },
+  criticalStockBadge: {
+    backgroundColor: '#ffebee',
+  },
   stockText: {
-    color: '#c62828',
     fontSize: 12,
     fontWeight: '600',
+    color: '#c62828',
   },
   productDetails: {
     padding: 12,
@@ -929,6 +919,46 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
     paddingHorizontal: 10,
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 16,
+    marginBottom: 15,
+  },
+  emptyStateText: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#555',
+    marginTop: 10,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  emptyProductsContainer: {
+    width: 250,
+    height: 240,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 16,
+    marginRight: 15,
+  },
+  emptyProductsText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#555',
+    marginTop: 10,
+  },
+  emptyProductsSubtext: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 5,
   },
 });
 

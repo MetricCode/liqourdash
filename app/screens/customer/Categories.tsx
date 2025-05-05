@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
-  StyleSheet, 
   TouchableOpacity, 
   FlatList, 
   Image, 
@@ -12,21 +11,51 @@ import {
   Dimensions,
   StatusBar,
   Animated,
-  Alert
+  Alert,
+  StyleSheet
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_DB } from '../../../FirebaseConfig';
 import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 import { Product } from '../../types/Product';
-// Add this import at the top of the file
 import { addToCart } from '../../services/cartService';
+import { useNavigation, CommonActions } from '@react-navigation/native';
+
 
 const { width } = Dimensions.get('window');
 const SPACING = 12;
 const CATEGORY_WIDTH = 90;
 
+// Helper function to get the correct icon for each category
+const getCategoryIcon = (categoryId: string): {
+  iconName: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bgColor: string;
+} => {
+  const categoryLower = categoryId.toLowerCase();
+  
+  const iconMapping: Record<string, { iconName: keyof typeof Ionicons.glyphMap; color: string; bgColor: string }> = {
+    wine: { iconName: 'wine', color: '#C62828', bgColor: '#FFEBEE' },
+    beer: { iconName: 'beer', color: '#F57C00', bgColor: '#FFF3E0' },
+    spirits: { iconName: 'flask', color: '#303F9F', bgColor: '#E8EAF6' },
+    whiskey: { iconName: 'cafe', color: '#5D4037', bgColor: '#EFEBE9' },
+    gin: { iconName: 'flower', color: '#7B1FA2', bgColor: '#F3E5F5' },
+    rum: { iconName: 'flask', color: '#E65100', bgColor: '#FFF3E0' },
+    tequila: { iconName: 'leaf', color: '#2E7D32', bgColor: '#E8F5E9' },
+    vodka: { iconName: 'water', color: '#0277BD', bgColor: '#E1F5FE' }
+  };
+  
+  // Return the mapping or a default if the category isn't found
+  return iconMapping[categoryLower] || { 
+    iconName: 'grid', 
+    color: '#455A64', 
+    bgColor: '#ECEFF1' 
+  };
+};
+
 const Categories = () => {
-  const [categories, setCategories] = useState<{id: string, name: string, icon: string, color: string}[]>([]);
+  const navigation = useNavigation(); // Add this line
+  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,19 +75,6 @@ const Categories = () => {
     extrapolate: 'clamp'
   });
 
-  const categoryIcons: Record<string, any> = {
-    whiskey: { icon: 'cafe-outline', color: '#8D6E63' },
-    beer: { icon: 'beer-outline', color: '#FFA000' },
-    rum: { icon: 'flask-outline', color: '#795548' },
-    tequila: { icon: 'leaf-outline', color: '#43A047' },
-    gin: { icon: 'flower-outline', color: '#5E35B1' },
-    wine: { icon: 'wine-outline', color: '#C62828' },
-    vodka: { icon: 'water-outline', color: '#1E88E5' },
-    spirits: { icon: 'wine-outline', color: '#6D4C41' },
-    // Fallback for unknown categories
-    default: { icon: 'grid-outline', color: '#607D8B' }
-  };
-
   useEffect(() => {
     // Fetch categories from Firestore
     const fetchCategories = async () => {
@@ -69,20 +85,14 @@ const Categories = () => {
         const loadedCategories = categoriesSnapshot.docs.map(doc => {
           const categoryData = doc.data();
           const categoryId = doc.id;
-          const categoryLower = categoryId.toLowerCase();
           
           // Get the name from the document data, or format the ID if name doesn't exist
           const displayName = categoryData.name || 
                             (categoryId.charAt(0).toUpperCase() + categoryId.slice(1));
           
-          // Use the defined icon or fallback to default
-          const iconInfo = categoryIcons[categoryLower] || categoryIcons.default;
-          
           return {
             id: categoryId,
-            name: displayName,
-            icon: iconInfo.icon,
-            color: iconInfo.color
+            name: displayName
           };
         });
 
@@ -145,31 +155,25 @@ const Categories = () => {
 
   const renderCategoryItem = ({ item }: { item: typeof categories[0] }) => {
     const isSelected = selectedCategory === item.id;
-    
-    // Ensure icon name is valid by providing a fallback
-    let iconName = item.icon as keyof typeof Ionicons.glyphMap;
-    if (!Ionicons.glyphMap[iconName]) {
-      // Fallback to a default icon if the specified one isn't available
-      iconName = 'grid-outline' as keyof typeof Ionicons.glyphMap;
-    }
+    const iconInfo = getCategoryIcon(item.id);
     
     return (
       <TouchableOpacity 
         style={[
           styles.categoryItem, 
           isSelected && styles.selectedCategoryItem,
-          { borderColor: item.color, borderWidth: isSelected ? 0 : 1 }
+          { borderColor: iconInfo.color, borderWidth: isSelected ? 0 : 1 }
         ]}
         onPress={() => setSelectedCategory(item.id)}
       >
         <View style={[
           styles.categoryIconContainer,
-          isSelected ? { backgroundColor: item.color } : { backgroundColor: 'rgba(0,0,0,0.03)' }
+          isSelected ? { backgroundColor: iconInfo.color } : { backgroundColor: 'rgba(0,0,0,0.03)' }
         ]}>
           <Ionicons 
-            name={iconName} 
+            name={iconInfo.iconName} 
             size={24} 
-            color={isSelected ? 'white' : item.color} 
+            color={isSelected ? 'white' : iconInfo.color} 
           />
         </View>
         <Text 
@@ -188,8 +192,8 @@ const Categories = () => {
 
   const renderProductItem = ({ item, index }: { item: Product, index: number }) => {
     // Find the category to use its color for accents
-    const category = categories.find(cat => cat.id === item.category);
-    const accentColor = category?.color || '#4a6da7';
+    const iconInfo = getCategoryIcon(item.category);
+    const accentColor = iconInfo.color;
     
     // Alternate left and right alignment for staggered effect
     const isLeftItem = index % 2 === 0;
@@ -267,11 +271,20 @@ const Categories = () => {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Discover</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="search-outline" size={24} color="#333" />
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => {
+              navigation.dispatch(
+                CommonActions.navigate({
+                  name: 'Search'
+                })
+              );
+            }}
+          >
+            <Ionicons name="search" size={24} color="#333" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="options-outline" size={24} color="#333" />
+            <Ionicons name="options" size={24} color="#333" />
           </TouchableOpacity>
         </View>
       </View>
@@ -321,7 +334,7 @@ const Categories = () => {
             )}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
-                <Ionicons name="wine-outline" size={70} color="#ddd" />
+                <Ionicons name="wine" size={70} color="#ddd" />
                 <Text style={styles.emptyTitle}>No products found</Text>
                 <Text style={styles.emptyText}>
                   We couldn't find any products in this category

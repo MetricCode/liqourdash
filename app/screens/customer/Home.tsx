@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
-  StyleSheet, 
   FlatList, 
   Image, 
   TouchableOpacity, 
@@ -13,24 +12,54 @@ import {
   StatusBar,
   ScrollView,
   ImageBackground,
-  Alert
+  Alert,
+  StyleSheet
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_DB } from '../../../FirebaseConfig';
 import { collection, onSnapshot, query, limit, where, getDocs } from 'firebase/firestore';
 import { Product } from '../../types/Product';
-// Add at the top of both files
 import { addToCart } from '../../services/cartService';
+import { useNavigation, CommonActions } from '@react-navigation/native';
+
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.65;
 const SPACING = 15;
 
+// Helper function to get the correct icon for each category
+const getCategoryIcon = (categoryId: string): {
+  iconName: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bgColor: string;
+} => {
+  const categoryLower = categoryId.toLowerCase();
+  
+  const iconMapping: Record<string, { iconName: keyof typeof Ionicons.glyphMap; color: string; bgColor: string }> = {
+    wine: { iconName: 'wine', color: '#C62828', bgColor: '#FFEBEE' },
+    beer: { iconName: 'beer', color: '#F57C00', bgColor: '#FFF3E0' },
+    spirits: { iconName: 'flask', color: '#303F9F', bgColor: '#E8EAF6' },
+    whiskey: { iconName: 'cafe', color: '#5D4037', bgColor: '#EFEBE9' },
+    gin: { iconName: 'flower', color: '#7B1FA2', bgColor: '#F3E5F5' },
+    rum: { iconName: 'flask', color: '#E65100', bgColor: '#FFF3E0' },
+    tequila: { iconName: 'leaf', color: '#2E7D32', bgColor: '#E8F5E9' },
+    vodka: { iconName: 'water', color: '#0277BD', bgColor: '#E1F5FE' }
+  };
+  
+  // Return the mapping or a default if the category isn't found
+  return iconMapping[categoryLower] || { 
+    iconName: 'grid', 
+    color: '#455A64', 
+    bgColor: '#ECEFF1' 
+  };
+};
+
 const CustomerHome = () => {
+  const navigation = useNavigation(); // Add this line  
   const [activeCategory, setActiveCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<{id: string, name: string, icon: string, bg: string, color: string}[]>([]);
+  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
 
   // Load categories
   useEffect(() => {
@@ -39,39 +68,17 @@ const CustomerHome = () => {
         const categoriesRef = collection(FIREBASE_DB, 'categories');
         const snapshot = await getDocs(categoriesRef);
         
-        const categoryIcons: Record<string, any> = {
-          wine: { name: 'wine-outline', color: '#C62828', bg: '#FFEBEE' },
-          beer: { name: 'beer-outline', color: '#F57C00', bg: '#FFF3E0' },
-          spirits: { name: 'wine-outline', color: '#303F9F', bg: '#E8EAF6' },
-          whiskey: { name: 'cafe-outline', color: '#5D4037', bg: '#EFEBE9' },
-          gin: { name: 'flower-outline', color: '#7B1FA2', bg: '#F3E5F5' },
-          rum: { name: 'flask-outline', color: '#E65100', bg: '#FFF3E0' },
-          tequila: { name: 'leaf-outline', color: '#2E7D32', bg: '#E8F5E9' },
-          vodka: { name: 'water-outline', color: '#0277BD', bg: '#E1F5FE' }
-        };
-        
         const loadedCategories = snapshot.docs.map(doc => {
           const categoryData = doc.data();
           const categoryId = doc.id;
-          const categoryLower = categoryId.toLowerCase();
           
           // Get the name from the document data, or format the ID if name doesn't exist
           const displayName = categoryData.name || 
                             (categoryId.charAt(0).toUpperCase() + categoryId.slice(1));
           
-          // Ensure we have a valid icon or use default
-          let iconInfo = categoryIcons[categoryLower];
-          if (!iconInfo) {
-            // Default for unknown categories
-            iconInfo = { name: 'grid-outline', color: '#455A64', bg: '#ECEFF1' };
-          }
-          
           return {
             id: categoryId,
-            name: displayName,
-            icon: iconInfo.name,
-            color: iconInfo.color,
-            bg: iconInfo.bg
+            name: displayName
           };
         });
         
@@ -133,8 +140,8 @@ const CustomerHome = () => {
 
   const renderFeaturedItem = ({ item, index }: { item: Product, index: number }) => {
     // Find the category to use its color
-    const category = categories.find(cat => cat.id === item.category);
-    const accentColor = category?.color || '#4a6da7';
+    const iconInfo = getCategoryIcon(item.category);
+    const accentColor = iconInfo.color;
     
     return (
       <TouchableOpacity 
@@ -143,7 +150,6 @@ const CustomerHome = () => {
           { marginLeft: index === 0 ? SPACING : SPACING/2 }
         ]}
       >
-        {/* Add back all the product card content */}
         <View style={styles.imageContainer}>
           <Image 
             source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} 
@@ -199,11 +205,21 @@ const CustomerHome = () => {
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>LiquorDash</Text>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="search-outline" size={24} color="#333" />
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => {
+                // Use CommonActions for more reliable navigation
+                navigation.dispatch(
+                  CommonActions.navigate({
+                    name: 'Search'
+                  })
+                );
+              }}
+            >
+              <Ionicons name="search" size={24} color="#333" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="notifications-outline" size={24} color="#333" />
+              <Ionicons name="notifications" size={24} color="#333" />
             </TouchableOpacity>
           </View>
         </View>
@@ -245,12 +261,8 @@ const CustomerHome = () => {
             contentContainerStyle={styles.categoriesContainer}
           >
             {categories.length > 0 ? (
-              categories.map((category, index) => {
-                // Make sure we have a valid icon name for Ionicons
-                let iconName = category.icon as keyof typeof Ionicons.glyphMap;
-                if (!Ionicons.glyphMap[iconName]) {
-                  iconName = 'grid-outline' as keyof typeof Ionicons.glyphMap;
-                }
+              categories.map((category) => {
+                const iconInfo = getCategoryIcon(category.id);
                 
                 return (
                   <TouchableOpacity 
@@ -263,14 +275,21 @@ const CustomerHome = () => {
                   >
                     <View style={[
                       styles.categoryIcon, 
-                      { backgroundColor: category.bg }
+                      { backgroundColor: iconInfo.bgColor }
                     ]}>
-                      <Ionicons name={iconName} size={24} color={category.color} />
+                      <Ionicons 
+                        name={iconInfo.iconName} 
+                        size={24} 
+                        color={iconInfo.color} 
+                      />
                     </View>
                     <Text 
                       style={[
                         styles.categoryText,
-                        activeCategory === category.id && { color: category.color, fontWeight: '600' }
+                        activeCategory === category.id && { 
+                          color: iconInfo.color, 
+                          fontWeight: '600' 
+                        }
                       ]}
                     >
                       {category.name}
@@ -306,7 +325,7 @@ const CustomerHome = () => {
             ]}
             ListEmptyComponent={
               <View style={styles.emptyProductsContainer}>
-                <Ionicons name="wine-outline" size={50} color="#ddd" />
+                <Ionicons name="wine" size={50} color="#ddd" />
                 <Text style={styles.emptyTextLarge}>No products available</Text>
                 <Text style={styles.emptyText}>Check back later for our featured items</Text>
               </View>

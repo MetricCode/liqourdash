@@ -1,5 +1,5 @@
 // app/screens/customer/Cart.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,10 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  StatusBar,
+  Platform,
+  AccessibilityInfo
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_DB, FIREBASE_AUTH } from '../../../FirebaseConfig';
@@ -27,8 +30,24 @@ import {
   serverTimestamp, 
   deleteDoc 
 } from 'firebase/firestore';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 
+// Define the navigation param list type
+type RootStackParamList = {
+  Home: undefined;
+  Categories: undefined;
+  Cart: undefined;
+  Checkout: { 
+    cartItems: CartItem[], 
+    subtotal: number 
+  };
+  OrderDetails: { 
+    orderId: string 
+  };
+};
+
+// Define the CartItem type
 type CartItem = {
   id: string;
   productId: string;
@@ -40,29 +59,18 @@ type CartItem = {
   addedAt: Date;
 };
 
-type Order = {
-  id: string;
-  userId: string;
-  items: CartItem[];
-  status: 'pending' | 'processing' | 'delivered' | 'cancelled';
-  subtotal: number;
-  deliveryFee: number;
-  total: number;
-  createdAt: Date;
-  customerInfo: {
-    name: string;
-    address: string;
-    phone: string;
-  };
-};
-
 const Cart = () => {
+  // State declarations
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [processingOrder, setProcessingOrder] = useState(false);
-  const navigation = useNavigation();
+  const [operationInProgress, setOperationInProgress] = useState(false);
   
+  // Navigation
+  type NavigationProp = StackNavigationProp<RootStackParamList, 'Checkout'>;
+  const navigation = useNavigation<NavigationProp>();
+  
+  // Fetch cart items from Firestore
   const fetchCartItems = useCallback(async () => {
     try {
       const currentUser = FIREBASE_AUTH.currentUser;
@@ -72,7 +80,7 @@ const Cart = () => {
         return;
       }
       
-      // Direct access using user ID as document ID
+      // Direct document access using user's ID
       const cartRef = doc(FIREBASE_DB, 'carts', currentUser.uid);
       const cartSnap = await getDoc(cartRef);
       
@@ -83,13 +91,13 @@ const Cart = () => {
         return;
       }
       
-      // Extract data from the document
+      // Extract and format cart items
       const cartData = cartSnap.data();
       
       if (cartData.items && Array.isArray(cartData.items)) {
         setCartItems(cartData.items.map((item: any) => ({
           ...item,
-          id: item.id || Math.random().toString(), // Ensure we have an id
+          id: item.id || `item_${Math.random().toString(36).substr(2, 9)}`, // Ensure unique IDs
         })));
       } else {
         setCartItems([]);
@@ -101,11 +109,15 @@ const Cart = () => {
       console.error('Error fetching cart items:', error);
       setLoading(false);
       setRefreshing(false);
-      Alert.alert('Error', 'Failed to load your cart. Pull down to refresh.');
+      Alert.alert(
+        'Error', 
+        'Failed to load your cart. Pull down to refresh.',
+        [{ text: 'OK' }]
+      );
     }
   }, []);
   
-  // Change this useEffect to directly listen to the user's cart document
+  // Real-time listener for cart changes
   useEffect(() => {
     const currentUser = FIREBASE_AUTH.currentUser;
     if (!currentUser) {
@@ -113,11 +125,11 @@ const Cart = () => {
       return;
     }
     
-    // Direct access using user ID as document ID for real-time updates
+    // Set up real-time listener to the cart document
     const cartRef = doc(FIREBASE_DB, 'carts', currentUser.uid);
     
-    // Use onSnapshot to get real-time updates on the document
-    const unsubscribe = onSnapshot(cartRef, 
+    const unsubscribe = onSnapshot(
+      cartRef, 
       (docSnapshot) => {
         if (!docSnapshot.exists()) {
           setCartItems([]);
@@ -130,7 +142,7 @@ const Cart = () => {
         if (cartData.items && Array.isArray(cartData.items)) {
           setCartItems(cartData.items.map((item: any) => ({
             ...item,
-            id: item.id || Math.random().toString(), // Ensure we have an id
+            id: item.id || `item_${Math.random().toString(36).substr(2, 9)}`,
           })));
         } else {
           setCartItems([]);
@@ -141,193 +153,244 @@ const Cart = () => {
       (error) => {
         console.error('Error in cart snapshot listener:', error);
         setLoading(false);
-        Alert.alert('Error', 'Failed to sync your cart. Pull down to refresh.');
+        Alert.alert(
+          'Error', 
+          'Failed to sync your cart. Pull down to refresh.',
+          [{ text: 'OK' }]
+        );
       }
     );
     
+    // Clean up the listener on component unmount
     return () => unsubscribe();
   }, []);
   
+  // Handle pull-to-refresh
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchCartItems();
   }, [fetchCartItems]);
   
+  // Update item quantity in cart
   const updateQuantity = async (id: string, newQuantity: number) => {
-    if (newQuantity < 1) return;
+    if (newQuantity < 1 || operationInProgress) return;
     
     try {
-      const currentUser = FIREBASE_AUTH.currentUser;
-      if (!currentUser) return;
+      setOperationInProgress(true);
       
-      // Update local state first for UI responsiveness
+      const currentUser = FIREBASE_AUTH.currentUser;
+      if (!currentUser) {
+        setOperationInProgress(false);
+        return;
+      }
+      
+      // Update local state first for responsive UI
       const updatedItems = cartItems.map(item => 
         item.id === id ? { ...item, quantity: newQuantity } : item
       );
       setCartItems(updatedItems);
       
-      // Update Firestore - direct access to the document
+      // Update Firestore document
       const cartRef = doc(FIREBASE_DB, 'carts', currentUser.uid);
       
       await updateDoc(cartRef, {
         items: updatedItems,
         updatedAt: serverTimestamp()
       });
-    } catch (error) {
-      console.error('Error updating quantity:', error);
-      Alert.alert('Error', 'Failed to update quantity. Please try again.');
-      // Refresh to ensure UI is in sync with database
-      fetchCartItems();
-    }
-  };
-  
-  // Partial update for Cart.tsx - removeItem function fix
-  const removeItem = async (id: string) => {
-    try {
-      const currentUser = FIREBASE_AUTH.currentUser;
-      if (!currentUser) return;
       
-      // Find the exact index of the item we want to remove
-      const itemIndex = cartItems.findIndex(item => item.id === id);
-      if (itemIndex === -1) return;
-      
-      // Create a new array with the specific item removed
-      const updatedItems = [...cartItems];
-      updatedItems.splice(itemIndex, 1);
-      
-      // Update local state for immediate UI feedback
-      setCartItems(updatedItems);
-      
-      // Update Firestore
-      const cartRef = doc(FIREBASE_DB, 'carts', currentUser.uid);
-      const cartSnap = await getDoc(cartRef);
-      
-      if (cartSnap.exists()) {
-        if (updatedItems.length === 0) {
-          // If cart is empty, delete the cart document
-          await deleteDoc(cartRef);
-        } else {
-          // Otherwise update the items array with the new array
-          // that has the specific item removed
-          await updateDoc(cartRef, {
-            items: updatedItems,
-            updatedAt: serverTimestamp()
-          });
-        }
+      // Provide accessibility feedback
+      if (Platform.OS === 'ios') {
+        AccessibilityInfo.announceForAccessibility(`Quantity updated to ${newQuantity}`);
       }
     } catch (error) {
-      console.error('Error removing item:', error);
-      Alert.alert('Error', 'Failed to remove item. Please try again.');
-      // Refresh to ensure UI is in sync with database
+      console.error('Error updating quantity:', error);
+      Alert.alert(
+        'Error', 
+        'Failed to update quantity. Please try again.',
+        [{ text: 'OK' }]
+      );
+      // Refresh to ensure UI matches database state
       fetchCartItems();
+    } finally {
+      setOperationInProgress(false);
     }
   };
   
-  const getSubtotal = () => {
-    return cartItems.reduce(
-      (sum, item) => sum + (item.price * item.quantity),
-      0
+  // Remove item from cart
+  const removeItem = async (id: string, itemName: string) => {
+    if (operationInProgress) return;
+    
+    // Confirm removal with alert
+    Alert.alert(
+      'Remove Item',
+      `Are you sure you want to remove "${itemName}" from your cart?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setOperationInProgress(true);
+              
+              const currentUser = FIREBASE_AUTH.currentUser;
+              if (!currentUser) {
+                setOperationInProgress(false);
+                return;
+              }
+              
+              // Find the exact index of the item to remove
+              const itemIndex = cartItems.findIndex(item => item.id === id);
+              if (itemIndex === -1) {
+                setOperationInProgress(false);
+                return;
+              }
+              
+              // Create new array without the removed item
+              const updatedItems = [...cartItems];
+              updatedItems.splice(itemIndex, 1);
+              
+              // Update local state for immediate UI feedback
+              setCartItems(updatedItems);
+              
+              // Update Firestore
+              const cartRef = doc(FIREBASE_DB, 'carts', currentUser.uid);
+              const cartSnap = await getDoc(cartRef);
+              
+              if (cartSnap.exists()) {
+                if (updatedItems.length === 0) {
+                  // Delete the cart document if empty
+                  await deleteDoc(cartRef);
+                } else {
+                  // Update with the new items array
+                  await updateDoc(cartRef, {
+                    items: updatedItems,
+                    updatedAt: serverTimestamp()
+                  });
+                }
+              }
+              
+              // Provide accessibility feedback
+              if (Platform.OS === 'ios') {
+                AccessibilityInfo.announceForAccessibility(`${itemName} removed from cart`);
+              }
+            } catch (error) {
+              console.error('Error removing item:', error);
+              Alert.alert(
+                'Error', 
+                'Failed to remove item. Please try again.',
+                [{ text: 'OK' }]
+              );
+              // Refresh to ensure UI matches database state
+              fetchCartItems();
+            } finally {
+              setOperationInProgress(false);
+            }
+          }
+        }
+      ]
     );
   };
   
+  // Calculate cart totals using memoization for performance
+  const { subtotal, deliveryFee, total } = useMemo(() => {
+    const calculatedSubtotal = cartItems.reduce(
+      (sum, item) => sum + (item.price * item.quantity),
+      0
+    );
+    const fixedDeliveryFee = 3.50;
+    
+    return {
+      subtotal: calculatedSubtotal,
+      deliveryFee: fixedDeliveryFee,
+      total: calculatedSubtotal + fixedDeliveryFee
+    };
+  }, [cartItems]);
+  
+  // Handle checkout process
   const handleCheckout = async () => {
+    if (operationInProgress) return;
+    
     try {
-      setProcessingOrder(true);
+      setOperationInProgress(true);
+      
       const currentUser = FIREBASE_AUTH.currentUser;
       
       if (!currentUser) {
-        Alert.alert('Error', 'You must be logged in to place an order');
-        setProcessingOrder(false);
+        Alert.alert(
+          'Sign In Required', 
+          'Please sign in to proceed with checkout',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Sign In', 
+              onPress: () => {
+                // Navigate to sign-in screen
+                navigation.navigate('Login' as never);
+              }
+            }
+          ]
+        );
+        setOperationInProgress(false);
         return;
       }
       
       if (cartItems.length === 0) {
-        Alert.alert('Error', 'Your cart is empty');
-        setProcessingOrder(false);
+        Alert.alert(
+          'Empty Cart', 
+          'Please add items to your cart before checkout',
+          [{ text: 'OK' }]
+        );
+        setOperationInProgress(false);
         return;
       }
       
-      // Get user profile for delivery details
-      const userProfileRef = doc(FIREBASE_DB, 'userProfiles', currentUser.uid);
-      const userProfileSnap = await getDoc(userProfileRef);
-      
-      if (!userProfileSnap.exists()) {
-        Alert.alert('Missing Information', 'Please complete your profile with delivery address');
-        setProcessingOrder(false);
-        // Navigate to profile screen
-        // navigation.navigate('Profile');
-        return;
-      }
-      
-      const userProfile = userProfileSnap.data();
-      
-      const subtotal = getSubtotal();
-      const deliveryFee = 5.99;
-      const total = subtotal + deliveryFee;
-      
-      // Create new order
-      const order = {
-        userId: currentUser.uid,
-        items: cartItems,
-        status: 'pending',
-        subtotal,
-        deliveryFee,
-        total,
-        createdAt: serverTimestamp(),
-        customerInfo: {
-          name: userProfile.name || currentUser.displayName || 'Customer',
-          address: userProfile.address || 'No address provided',
-          phone: userProfile.phone || 'No phone provided'
-        }
-      };
-      
-      const orderRef = await addDoc(collection(FIREBASE_DB, 'orders'), order);
-      
-      // Clear cart - direct document reference
-      await deleteDoc(doc(FIREBASE_DB, 'carts', currentUser.uid));
-      
-      setCartItems([]);
-      setProcessingOrder(false);
-      
-      Alert.alert(
-        'Order Placed',
-        'Your order has been placed successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate to orders screen
-              // navigation.navigate('Orders');
-            }
+      // Use CommonActions to navigate to Checkout within the stack
+      navigation.dispatch(
+        CommonActions.navigate({
+          name: 'Checkout',
+          params: { 
+            cartItems, 
+            subtotal 
           }
-        ]
+        })
       );
+      
     } catch (error) {
       console.error('Error processing checkout:', error);
-      setProcessingOrder(false);
-      Alert.alert('Error', 'Failed to place your order. Please try again.');
+      Alert.alert(
+        'Error', 
+        'Failed to proceed to checkout. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setOperationInProgress(false);
     }
   };
   
-  const deliveryFee = 3.50;
-  const subtotal = getSubtotal();
-  const total = subtotal + deliveryFee;
-  
+  // Render each cart item
   const renderCartItem = ({ item }: { item: CartItem }) => (
-    <View style={styles.cartItem}>
+    <View 
+      style={styles.cartItem}
+      accessible={true}
+      accessibilityLabel={`${item.name}, ${item.quantity} items, ${item.price.toFixed(2)} dollars each`}
+    >
       <Image 
         source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} 
-        style={styles.itemImage} 
+        style={styles.itemImage}
+        defaultSource={{ uri: 'https://via.placeholder.com/150' }} 
       />
       
       <View style={styles.itemDetails}>
-        <Text style={styles.itemName}>{item.name}</Text>
+        <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
         <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
         
         <View style={styles.quantityContainer}>
           <TouchableOpacity 
             style={styles.quantityButton}
             onPress={() => updateQuantity(item.id, item.quantity - 1)}
+            accessibilityLabel={`Decrease quantity, current quantity is ${item.quantity}`}
+            disabled={operationInProgress}
           >
             <Ionicons name="remove" size={18} color="#4a6da7" />
           </TouchableOpacity>
@@ -337,6 +400,8 @@ const Cart = () => {
           <TouchableOpacity 
             style={styles.quantityButton}
             onPress={() => updateQuantity(item.id, item.quantity + 1)}
+            accessibilityLabel={`Increase quantity, current quantity is ${item.quantity}`}
+            disabled={operationInProgress}
           >
             <Ionicons name="add" size={18} color="#4a6da7" />
           </TouchableOpacity>
@@ -345,27 +410,38 @@ const Cart = () => {
       
       <TouchableOpacity 
         style={styles.removeButton}
-        onPress={() => removeItem(item.id)}
+        onPress={() => removeItem(item.id, item.name)}
+        accessibilityLabel={`Remove ${item.name} from cart`}
+        disabled={operationInProgress}
       >
         <Ionicons name="trash-outline" size={22} color="#f44336" />
       </TouchableOpacity>
     </View>
   );
   
+  // Show loading indicator while initializing
   if (loading) {
     return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#4a6da7" />
-        <Text style={styles.loadingText}>Loading your cart...</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f9f9f9" />
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color="#4a6da7" />
+          <Text style={styles.loadingText}>Loading your cart...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
   
+  // Render the main component
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#f9f9f9" />
+      
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Cart</Text>
-        <Text style={styles.itemCount}>{cartItems.length} items</Text>
+        <View style={styles.itemCountContainer}>
+          <Text style={styles.itemCount}>{cartItems.length} items</Text>
+        </View>
       </View>
       
       {cartItems.length > 0 ? (
@@ -381,8 +457,12 @@ const Cart = () => {
                 onRefresh={onRefresh}
                 colors={['#4a6da7']}
                 tintColor={'#4a6da7'}
+                title="Refreshing cart..."
+                titleColor="#666"
               />
             }
+            ListFooterComponent={<View style={{ height: 20 }} />}
+            showsVerticalScrollIndicator={false}
           />
           
           <View style={styles.summaryContainer}>
@@ -404,12 +484,13 @@ const Cart = () => {
             <TouchableOpacity 
               style={[
                 styles.checkoutButton,
-                processingOrder && styles.disabledButton
+                operationInProgress && styles.disabledButton
               ]}
               onPress={handleCheckout}
-              disabled={processingOrder}
+              accessibilityLabel={`Proceed to checkout. Total amount ${total.toFixed(2)} dollars`}
+              disabled={operationInProgress}
             >
-              {processingOrder ? (
+              {operationInProgress ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
                 <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
@@ -422,12 +503,35 @@ const Cart = () => {
           <Ionicons name="cart" size={80} color="#ddd" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptyText}>Add some drinks to get started</Text>
-          <TouchableOpacity 
-            style={styles.shopButton}
-            onPress={() => navigation.goBack()}  
-          >
-            <Text style={styles.shopButtonText}>Browse Products</Text>
-          </TouchableOpacity>
+          
+          <View style={styles.emptyActionsContainer}>
+            <TouchableOpacity 
+              style={styles.shopButton}
+              onPress={() => {
+                // Try to go back, if not possible navigate to Home
+                try {
+                  navigation.goBack();
+                } catch (error) {
+                  navigation.dispatch(
+                    CommonActions.navigate({ name: 'Home' })
+                  );
+                }
+              }}
+              accessibilityLabel="Browse products"
+            >
+              <Text style={styles.shopButtonText}>Browse Products</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.shopButton, styles.categoriesButton]}
+              onPress={() => navigation.dispatch(
+                CommonActions.navigate({ name: 'Categories' })
+              )}
+              accessibilityLabel="View categories"
+            >
+              <Text style={styles.shopButtonText}>View Categories</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </SafeAreaView>
@@ -457,25 +561,28 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+    backgroundColor: 'white',
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#4a6da7',
   },
-  itemCount: {
-    fontSize: 16,
-    color: '#666',
+  itemCountContainer: {
     backgroundColor: '#f0f0f0',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
   },
+  itemCount: {
+    fontSize: 16,
+    color: '#666',
+  },
   cartList: {
     paddingHorizontal: 20,
     paddingTop: 15,
-    paddingBottom: 20,
-    minHeight: '100%', // This helps ensure the pull-to-refresh works when list is short
+    paddingBottom: 120, // Extra space for the summary container
+    minHeight: '100%', // Ensures pull-to-refresh works correctly
   },
   cartItem: {
     flexDirection: 'row',
@@ -493,7 +600,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 12,
-    backgroundColor: '#f0f0f0', // Placeholder background color
+    backgroundColor: '#f0f0f0', // Placeholder background
   },
   itemDetails: {
     flex: 1,
@@ -505,6 +612,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 5,
+    lineHeight: 22,
   },
   itemPrice: {
     fontSize: 18,
@@ -552,6 +660,10 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   summaryContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: 'white',
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
@@ -560,7 +672,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.1,
     shadowRadius: 5,
-    elevation: 5,
+    elevation: 10,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -630,6 +742,9 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     textAlign: 'center',
   },
+  emptyActionsContainer: {
+    width: '100%',
+  },
   shopButton: {
     backgroundColor: '#4a6da7',
     borderRadius: 16,
@@ -640,6 +755,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 3,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  categoriesButton: {
+    backgroundColor: '#5d7eb8',
   },
   shopButtonText: {
     color: 'white',

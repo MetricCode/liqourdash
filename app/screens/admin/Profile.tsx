@@ -10,7 +10,10 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
-  Dimensions
+  Dimensions,
+  Image,
+  Platform,
+  Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_DB, FIREBASE_AUTH } from '../../../FirebaseConfig';
@@ -20,20 +23,33 @@ import {
   collection,
   getDocs,
   query,
-  where
+  where,
+  orderBy,
+  limit
 } from 'firebase/firestore';
+import { NavigationProp } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
-const AdminProfile = () => {
+const AdminProfile = ({ navigation }: { navigation: NavigationProp<any> }) => {
   const [loading, setLoading] = useState(true);
   const [adminName, setAdminName] = useState('Admin');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminJoinDate, setAdminJoinDate] = useState('');
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [scaleAnim] = useState(new Animated.Value(0.95));
   const [statsData, setStatsData] = useState({
     productsAdded: 0,
     ordersProcessed: 0,
     totalUsers: 0,
     totalRevenue: 0,
   });
+  const [recentActivity, setRecentActivity] = useState<{
+    type: string;
+    title: string;
+    timestamp: string;
+    details: string;
+  }[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -51,13 +67,44 @@ const AdminProfile = () => {
           setAdminName(user.email.split('@')[0]);
         }
         
+        if (user.email) {
+          setAdminEmail(user.email);
+        }
+        
+        // Set join date
+        if (user.metadata?.creationTime) {
+          const creationDate = new Date(user.metadata.creationTime);
+          setAdminJoinDate(creationDate.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }));
+        }
+        
         const userDoc = await getDoc(doc(FIREBASE_DB, "users", user.uid));
         if (userDoc.data()?.role !== "admin") {
           throw new Error("Admin access required");
         }
   
-        // Then fetch stats
-        await fetchAdminStats();
+        // Then fetch stats and recent activity
+        await Promise.all([
+          fetchAdminStats(),
+          fetchRecentActivity()
+        ]);
+        
+        // Animate elements in
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true
+          })
+        ]).start();
         
       } catch (error) {
         console.error("Error loading admin data:", error);
@@ -71,32 +118,41 @@ const AdminProfile = () => {
     };
   
     loadData();
-  }, []);
+  }, [fadeAnim, scaleAnim]);
 
   const fetchAdminStats = async () => {
     try {
-      const statsRef = doc(FIREBASE_DB, "stats", "adminStats");
-      const statsSnap = await getDoc(statsRef);
-  
-      if (!statsSnap.exists()) {
-        // For demo purposes, use placeholder data if stats don't exist
-        setStatsData({
-          productsAdded: 24,
-          ordersProcessed: 57,
-          totalUsers: 132,
-          totalRevenue: 4895.50
-        });
-        return;
-      }
-  
-      const stats = statsSnap.data();
-      setStatsData({
-        productsAdded: stats.totalProducts || 0,
-        ordersProcessed: stats.totalOrders || 0,
-        totalUsers: stats.totalUsers || 0,
-        totalRevenue: stats.totalRevenue || 0
+      // Get total products
+      const productsRef = collection(FIREBASE_DB, "products");
+      const productsSnap = await getDocs(productsRef);
+      const totalProducts = productsSnap.size;
+      
+      // Get total orders
+      const ordersRef = collection(FIREBASE_DB, "orders");
+      const ordersSnap = await getDocs(ordersRef);
+      const totalOrders = ordersSnap.size;
+      
+      // Calculate revenue
+      let revenue = 0;
+      ordersSnap.forEach(doc => {
+        const orderData = doc.data();
+        if (orderData.total) {
+          revenue += orderData.total;
+        }
       });
-  
+      
+      // Get total users
+      const usersRef = collection(FIREBASE_DB, "users");
+      const usersSnap = await getDocs(usersRef);
+      const totalUsers = usersSnap.size;
+      
+      setStatsData({
+        productsAdded: totalProducts,
+        ordersProcessed: totalOrders,
+        totalUsers: totalUsers,
+        totalRevenue: revenue
+      });
+
     } catch (error) {
       console.error("Error fetching admin stats:", error);
       // Use placeholder data for demo purposes
@@ -106,26 +162,133 @@ const AdminProfile = () => {
         totalUsers: 132,
         totalRevenue: 4895.50
       });
+    }
+  };
+  
+  const fetchRecentActivity = async () => {
+    try {
+      // Sample: Get recent orders
+      const ordersRef = collection(FIREBASE_DB, "orders");
+      const recentOrdersQuery = query(
+        ordersRef, 
+        orderBy("createdAt", "desc"),
+        limit(3)
+      );
       
-      // Check if it's a permissions error
-      if ((error as any)?.code === 'permission-denied') {
-        Alert.alert(
-          'Access Denied', 
-          'You need admin privileges to view these stats'
-        );
-      }
+      const recentOrdersSnap = await getDocs(recentOrdersQuery);
+      const activities: {
+        type: string;
+        title: string;
+        timestamp: string;
+        details: string;
+      }[] = [];
+      
+      recentOrdersSnap.forEach(doc => {
+        const data = doc.data();
+        const orderDate = data.createdAt ? new Date(data.createdAt.toDate()) : new Date();
+        
+        activities.push({
+          type: "order",
+          title: `Order #${doc.id.slice(-5).toUpperCase()}`,
+          timestamp: orderDate.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          details: `$${data.total?.toFixed(2) || '0.00'} - ${data.customerInfo?.name || 'Unknown Customer'}`
+        });
+      });
+      
+      // Add sample product activity
+      const productsRef = collection(FIREBASE_DB, "products");
+      const recentProductsQuery = query(
+        productsRef,
+        orderBy("createdAt", "desc"),
+        limit(2)
+      );
+      
+      const recentProductsSnap = await getDocs(recentProductsQuery);
+      
+      recentProductsSnap.forEach(doc => {
+        const data = doc.data();
+        const productDate = data.createdAt ? new Date(data.createdAt.toDate()) : new Date();
+        
+        activities.push({
+          type: "product",
+          title: `Added ${data.name}`,
+          timestamp: productDate.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          details: `$${data.price?.toFixed(2) || '0.00'} - ${data.category || 'Uncategorized'}`
+        });
+      });
+      
+      // Sort activities by timestamp (newest first)
+      activities.sort((a, b) => {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+      
+      setRecentActivity(activities.slice(0, 5));
+      
+    } catch (error) {
+      console.error("Error fetching recent activity:", error);
+      // Use sample data if real data fetch fails
+      setRecentActivity([
+        {
+          type: "order",
+          title: "Order #10345",
+          timestamp: "May 4, 10:30 AM",
+          details: "$125.99 - John Smith"
+        },
+        {
+          type: "product",
+          title: "Added Johnnie Walker Blue",
+          timestamp: "May 3, 3:15 PM",
+          details: "$189.99 - Whiskey"
+        },
+        {
+          type: "order",
+          title: "Order #10344",
+          timestamp: "May 3, 1:20 PM",
+          details: "$78.50 - Sarah Davis"
+        }
+      ]);
     }
   };
 
   const handleLogout = async () => {
-    try {
-      await FIREBASE_AUTH.signOut();
-      // You would typically navigate to login screen here
-      // navigation.navigate('Login');
-    } catch (error) {
-      console.error("Error signing out:", error);
-      Alert.alert('Error', 'Failed to sign out');
-    }
+    Alert.alert(
+      'Confirm Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await FIREBASE_AUTH.signOut();
+              // You would typically navigate to login screen here
+              // navigation.navigate('Login');
+            } catch (error) {
+              console.error("Error signing out:", error);
+              Alert.alert('Error', 'Failed to sign out');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleNavigate = (screen: string) => {
+    navigation.navigate(screen);
   };
 
   if (loading) {
@@ -133,7 +296,7 @@ const AdminProfile = () => {
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#4a6da7" />
         <ActivityIndicator size="large" color="#4a6da7" />
-        <Text style={styles.loadingText}>Loading admin dashboard...</Text>
+        <Text style={styles.loadingText}>Loading admin profile...</Text>
       </View>
     );
   }
@@ -141,116 +304,246 @@ const AdminProfile = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4a6da7" />
+      
+      {/* Header with profile info */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.adminAvatar}>
-            <Text style={styles.avatarText}>{adminName.charAt(0).toUpperCase()}</Text>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Admin Profile</Text>
+          <View style={styles.placeholderButton} />
+        </View>
+        
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatarInner}>
+              <Text style={styles.avatarText}>{adminName.charAt(0).toUpperCase()}</Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.headerTitle}>{adminName}</Text>
+          
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{adminName}</Text>
+            <Text style={styles.profileEmail}>{adminEmail}</Text>
+            <View style={styles.adminBadge}>
+              <Ionicons name="shield-checkmark" size={12} color="white" style={styles.adminIcon} />
+              <Text style={styles.adminBadgeText}>Admin</Text>
+            </View>
           </View>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.dashboardSection}>
-          <Text style={styles.sectionTitle}>Dashboard Overview</Text>
-          <Text style={styles.sectionSubtitle}>Summary of your store performance</Text>
-        </View>
-
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <View style={[styles.iconBackground, { backgroundColor: 'rgba(74, 109, 167, 0.1)' }]}>
-              <Ionicons name="cube" size={24} color="#4a6da7" />
+      <ScrollView 
+        contentContainerStyle={styles.content} 
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View 
+          style={[
+            styles.sectionContainer, 
+            { 
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <Text style={styles.sectionTitle}>Account Information</Text>
+          
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="person" size={20} color="#4a6da7" />
+              </View>
+              <View style={styles.infoDetails}>
+                <Text style={styles.infoLabel}>Name</Text>
+                <Text style={styles.infoValue}>{adminName}</Text>
+              </View>
             </View>
-            <View style={styles.statTextContainer}>
+            
+            <View style={styles.divider} />
+            
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="mail" size={20} color="#4a6da7" />
+              </View>
+              <View style={styles.infoDetails}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue}>{adminEmail}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.divider} />
+            
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="calendar" size={20} color="#4a6da7" />
+              </View>
+              <View style={styles.infoDetails}>
+                <Text style={styles.infoLabel}>Joined</Text>
+                <Text style={styles.infoValue}>{adminJoinDate || 'Not available'}</Text>
+              </View>
+            </View>
+          </View>
+          
+          <TouchableOpacity style={styles.editProfileButton}>
+            <Text style={styles.editProfileText}>Edit Profile</Text>
+          </TouchableOpacity>
+        </Animated.View>
+        
+        <Animated.View 
+          style={[
+            styles.sectionContainer, 
+            { 
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <Text style={styles.sectionTitle}>Store Analytics</Text>
+          
+          <View style={styles.statsGrid}>
+            <View style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}>
+              <Ionicons name="cube" size={28} color="#1976D2" style={styles.statIcon} />
               <Text style={styles.statValue}>{statsData.productsAdded}</Text>
               <Text style={styles.statLabel}>Products</Text>
             </View>
-          </View>
-          
-          <View style={styles.statCard}>
-            <View style={[styles.iconBackground, { backgroundColor: 'rgba(46, 204, 113, 0.1)' }]}>
-              <Ionicons name="list" size={24} color="#2ecc71" />
-            </View>
-            <View style={styles.statTextContainer}>
+            
+            <View style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}>
+              <Ionicons name="list" size={28} color="#388E3C" style={styles.statIcon} />
               <Text style={styles.statValue}>{statsData.ordersProcessed}</Text>
               <Text style={styles.statLabel}>Orders</Text>
             </View>
-          </View>
-          
-          <View style={styles.statCard}>
-            <View style={[styles.iconBackground, { backgroundColor: 'rgba(142, 68, 173, 0.1)' }]}>
-              <Ionicons name="people" size={24} color="#8e44ad" />
-            </View>
-            <View style={styles.statTextContainer}>
+            
+            <View style={[styles.statCard, { backgroundColor: '#F3E5F5' }]}>
+              <Ionicons name="people" size={28} color="#7B1FA2" style={styles.statIcon} />
               <Text style={styles.statValue}>{statsData.totalUsers}</Text>
               <Text style={styles.statLabel}>Users</Text>
             </View>
-          </View>
-          
-          <View style={styles.statCard}>
-            <View style={[styles.iconBackground, { backgroundColor: 'rgba(230, 126, 34, 0.1)' }]}>
-              <Ionicons name="cash" size={24} color="#e67e22" />
-            </View>
-            <View style={styles.statTextContainer}>
+            
+            <View style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}>
+              <Ionicons name="cash" size={28} color="#E65100" style={styles.statIcon} />
               <Text style={styles.statValue}>${statsData.totalRevenue.toFixed(0)}</Text>
               <Text style={styles.statLabel}>Revenue</Text>
             </View>
           </View>
-        </View>
-
-        <View style={styles.dashboardSection}>
-          <Text style={styles.sectionTitle}>Admin Tools</Text>
-          <Text style={styles.sectionSubtitle}>Manage your store efficiently</Text>
-        </View>
-
-        <View style={styles.adminToolsContainer}>
-          <TouchableOpacity style={styles.adminToolCard} onPress={() => {/* Navigate to products */}}>
-            <View style={styles.toolIconContainer}>
-              <Ionicons name="cube" size={24} color="#4a6da7" />
-            </View>
-            <Text style={styles.toolTitle}>Products</Text>
-            <Text style={styles.toolDescription}>Manage your store inventory</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.adminToolCard} onPress={() => {/* Navigate to orders */}}>
-            <View style={styles.toolIconContainer}>
-              <Ionicons name="list" size={24} color="#4a6da7" />
-            </View>
-            <Text style={styles.toolTitle}>Orders</Text>
-            <Text style={styles.toolDescription}>Track and update orders</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.adminToolCard} onPress={() => {/* Navigate to users */}}>
-            <View style={styles.toolIconContainer}>
-              <Ionicons name="people" size={24} color="#4a6da7" />
-            </View>
-            <Text style={styles.toolTitle}>Users</Text>
-            <Text style={styles.toolDescription}>Manage user accounts</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.adminToolCard} onPress={() => {/* Navigate to settings */}}>
-            <View style={styles.toolIconContainer}>
-              <Ionicons name="settings" size={24} color="#4a6da7" />
-            </View>
-            <Text style={styles.toolTitle}>Settings</Text>
-            <Text style={styles.toolDescription}>Configure app settings</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.dashboardSection}>
-          <Text style={styles.sectionTitle}>Account</Text>
-        </View>
+        </Animated.View>
+        
+        <Animated.View 
+          style={[
+            styles.sectionContainer, 
+            { 
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {recentActivity.map((activity, index) => (
+            <TouchableOpacity 
+              key={index}
+              style={styles.activityCard}
+              onPress={() => {
+                if (activity.type === 'order') handleNavigate('AdminOrders');
+                if (activity.type === 'product') handleNavigate('AdminProducts');
+              }}
+            >
+              <View style={[
+                styles.activityIconContainer, 
+                activity.type === 'order' 
+                  ? { backgroundColor: '#E3F2FD' } 
+                  : { backgroundColor: '#FFF3E0' }
+              ]}>
+                <Ionicons 
+                  name={activity.type === 'order' ? 'receipt' : 'cube'} 
+                  size={20} 
+                  color={activity.type === 'order' ? '#1976D2' : '#E65100'} 
+                />
+              </View>
+              
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>{activity.title}</Text>
+                <Text style={styles.activityDetails}>{activity.details}</Text>
+              </View>
+              
+              <View style={styles.activityTime}>
+                <Text style={styles.activityTimeText}>{activity.timestamp}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#999" />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </Animated.View>
+        
+        <Animated.View 
+          style={[
+            styles.sectionContainer, 
+            { 
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          
+          <View style={styles.quickActionsGrid}>
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => handleNavigate('AdminProducts')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="cube" size={24} color="#1976D2" />
+              </View>
+              <Text style={styles.quickActionText}>Products</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => handleNavigate('AdminOrders')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: '#E8F5E9' }]}>
+                <Ionicons name="list" size={24} color="#388E3C" />
+              </View>
+              <Text style={styles.quickActionText}>Orders</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => handleNavigate('CategoriesManagement')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: '#F3E5F5' }]}>
+                <Ionicons name="pricetag" size={24} color="#7B1FA2" />
+              </View>
+              <Text style={styles.quickActionText}>Categories</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => handleNavigate('AdminDeliveries')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: '#FFF3E0' }]}>
+                <Ionicons name="car" size={24} color="#E65100" />
+              </View>
+              <Text style={styles.quickActionText}>Deliveries</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
         
         <TouchableOpacity 
           style={styles.logoutButton}
           onPress={handleLogout}
         >
-          <Ionicons name="log-out-outline" size={20} color="#fff" />
+          <Ionicons name="log-out" size={20} color="white" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
+        
+        <Text style={styles.versionText}>LiquorDash Admin v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -273,139 +566,290 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   header: {
-    paddingVertical: 25,
-    paddingHorizontal: 20,
     backgroundColor: '#4a6da7',
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingTop: Platform.OS === 'ios' ? 10 : 25,
+    paddingBottom: 25,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  headerContent: {
+  headerTopRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 20,
   },
-  adminAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  avatarText: {
-    fontSize: 22,
+  headerTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: 'white',
   },
-  welcomeText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  headerTitle: {
+  placeholderButton: {
+    width: 40,
+    height: 40,
+  },
+  profileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 25,
+  },
+  avatarContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  avatarInner: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
     fontSize: 24,
     fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 5,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 10,
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  adminIcon: {
+    marginRight: 4,
+  },
+  adminBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: 'white',
   },
   content: {
     padding: 20,
     paddingBottom: 40,
   },
-  dashboardSection: {
+  sectionContainer: {
+    marginBottom: 25,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 15,
-    marginTop: 10,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#777',
-    marginTop: 5,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 25,
-  },
-  statCard: {
-    width: '48%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 15,
     marginBottom: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
+  },
+  seeAllText: {
+    color: '#4a6da7',
+    fontWeight: '600',
+  },
+  infoCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  iconBackground: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  statTextContainer: {
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#777',
-    marginTop: 2,
-  },
-  adminToolsContainer: {
+  infoRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 25,
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 15,
   },
-  adminToolCard: {
-    width: '48%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 15,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  toolIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
+  infoIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(74, 109, 167, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    marginRight: 15,
   },
-  toolTitle: {
+  infoDetails: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 4,
+  },
+  infoValue: {
     fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 15,
+  },
+  editProfileButton: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  editProfileText: {
+    color: '#4a6da7',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    width: '48%',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  statIcon: {
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 3,
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  activityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  activityIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontWeight: '600',
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 4,
+  },
+  activityDetails: {
+    fontSize: 13,
+    color: '#666',
+  },
+  activityTime: {
+    alignItems: 'flex-end',
+  },
+  activityTimeText: {
+    fontSize: 12,
+    color: '#999',
     marginBottom: 5,
   },
-  toolDescription: {
-    fontSize: 13,
-    color: '#777',
+  quickActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  quickActionCard: {
+    width: '48%',
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  quickActionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
   },
   logoutButton: {
     flexDirection: 'row',
@@ -414,7 +858,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e53935',
     borderRadius: 12,
     paddingVertical: 15,
-    marginBottom: 20,
+    marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -427,6 +871,12 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 16,
   },
+  versionText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 12,
+    marginBottom: 10,
+  }
 });
 
 export default AdminProfile;
