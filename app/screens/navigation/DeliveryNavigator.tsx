@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from "@react-navigation/stack";
 import { Ionicons } from '@expo/vector-icons';
 
 // Import Delivery Screens
@@ -8,10 +9,26 @@ import DeliveryOrders from '../delivery/Orders';
 import DeliveryProfile from '../delivery/Profile';
 import DeliveryRoutes from '../delivery/Routes';
 import DeliveryHistory from '../delivery/History';
+import Map from '../delivery/Map';
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
 const DeliveryNavigator = () => {
+  const myDeliveryStack = () => {
+    return (
+      <Stack.Navigator screenOptions={{
+        headerShown:false,
+      }}
+      initialRouteName="Routes"
+      >
+        <Stack.Screen name="Routes" component={DeliveryRoutes} />
+        <Stack.Screen name="MapView" component={Map} />
+      </Stack.Navigator>
+    );
+  };
+
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -49,7 +66,16 @@ const DeliveryNavigator = () => {
     >
       <Tab.Screen name="Dashboard" component={DeliveryHome} />
       <Tab.Screen name="Orders" component={DeliveryOrders} />
-      <Tab.Screen name="Routes" component={DeliveryRoutes} />
+      <Tab.Screen
+            name="Routes"
+            component={myDeliveryStack}
+            // options={{
+            //   tabBarIcon: ({ color }) => {
+            //     return <Entypo name="home" size={25} color={color} />;
+            //   },
+            // }}
+          />
+      {/* <Tab.Screen name="Routes" component={DeliveryRoutes} /> */}
       <Tab.Screen name="History" component={DeliveryHistory} />
       <Tab.Screen name="Profile" component={DeliveryProfile} />
     </Tab.Navigator>

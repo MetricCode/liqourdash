@@ -25,6 +25,7 @@ import {
 import { NavigationProp, useIsFocused } from '@react-navigation/native';
 
 const DeliveryRoutes = ({ navigation }: { navigation: NavigationProp<any> }) => {
+  
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   interface Route {
@@ -140,6 +141,7 @@ const DeliveryRoutes = ({ navigation }: { navigation: NavigationProp<any> }) => 
   const handleStartRoute = (routeId: string) => {
     Alert.alert('Start Route', `Navigation would start for route ID: ${routeId}`);
     // You would implement navigation integration here
+    navigation.navigate("MapView");
   };
 
   return (
@@ -245,7 +247,10 @@ const DeliveryRoutes = ({ navigation }: { navigation: NavigationProp<any> }) => 
                         styles.actionButton,
                         { backgroundColor: route.status === 'active' ? '#4caf50' : '#ff9800' }
                       ]}
-                      onPress={() => handleStartRoute(route.id)}
+                      onPress={() => {
+                        handleStartRoute(route.id)
+                       
+                       }}
                     >
                       <Ionicons 
                         name={route.status === 'active' ? 'navigate' : 'play'} 
@@ -253,6 +258,7 @@ const DeliveryRoutes = ({ navigation }: { navigation: NavigationProp<any> }) => 
                         color="white" 
                         style={styles.actionButtonIcon} 
                       />
+                      
                       <Text style={styles.actionButtonText}>
                         {route.status === 'active' ? 'Continue Route' : 'Start Route'}
                       </Text>
