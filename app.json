@@ -21,10 +21,30 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "config": {
+        "googleMaps": {
+          "apiKey": "process.env.GOOGLE_MAPS_API_KEY"
+        }
+      },
       "package": "com.timothyndiritu.liqourDash"
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Liqour Dash to use your location."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b41fc82f-444c-45ba-baf2-e124b25edeff"
+      }
+    },
+    "owner": "systemproject31"
   }
 }
