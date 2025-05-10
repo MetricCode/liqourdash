@@ -7,6 +7,7 @@ import MapViewStyle from "../../../utils/MapViewStyle.json";
 
 //zustand
 import useStore from "../../../utils/useStore";
+import MapsSearchBar from "../shared/MapsSearchBar";
 
 const Map = () => {
   const location = useStore((state) => state.myStoredLocation);
@@ -36,6 +37,7 @@ const Map = () => {
             />
           </Marker>
         </MapView>
+       
       </View>
     )
   );

@@ -27,7 +27,8 @@ import {
   updatePassword,
 } from "firebase/auth";
 import { useNavigation } from "@react-navigation/native";
-
+import MapsSearchBar from "../shared/MapsSearchBar";
+import useStore from "../../../utils/useStore";
 const CustomerProfile = () => {
   const navigation = useNavigation();
   const auth = FIREBASE_AUTH;
@@ -35,12 +36,24 @@ const CustomerProfile = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  //fetch current location from store and set that as default address
+  const currentLocation = useStore((state) => state.myStoredLocation);
+  useEffect(() => {
+    console.log("current location", currentLocation);
+   }, [currentLocation]);
+ 
   const [userProfile, setUserProfile] = useState({
     name: user?.displayName || "",
     email: user?.email || "",
     phone: "",
     address: "",
+    position:{}
   });
+
+  useEffect(() => {
+    console.log("the user profile", userProfile);
+  }, [userProfile]);
 
   const [editMode, setEditMode] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -69,6 +82,7 @@ const CustomerProfile = () => {
           email: user.email || data.email || "",
           phone: data.phone || "",
           address: data.address || "",
+          position: data.position || {},
         });
       } else {
         // If no profile exists, use what we have from user auth
@@ -77,6 +91,7 @@ const CustomerProfile = () => {
           email: user.email || "",
           phone: "",
           address: "",
+          position: {},
         });
       }
     } catch (error) {
@@ -117,6 +132,7 @@ const CustomerProfile = () => {
         name: userProfile.name,
         phone: userProfile.phone,
         address: userProfile.address,
+        position: userProfile.position,
         updatedAt: serverTimestamp(),
       });
 
@@ -229,10 +245,8 @@ const CustomerProfile = () => {
           </TouchableOpacity>
         )}
       </View>
-
-      <FlatList
-        data={[{}]} // one “row” only
-        keyExtractor={(_, idx) => `prf-${idx}`}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -244,221 +258,204 @@ const CustomerProfile = () => {
             titleColor="#666"
           />
         }
-        renderItem={() => (
-          <>
-            <View style={styles.profileSection}>
-              <View style={styles.avatarContainer}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                    {userProfile.name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={styles.userName}>{userProfile.name}</Text>
-                <Text style={styles.userEmail}>{userProfile.email}</Text>
+      >
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {userProfile.name.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={styles.userName}>{userProfile.name}</Text>
+            <Text style={styles.userEmail}>{userProfile.email}</Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          {editMode ? (
+            <View style={styles.formContainer}>
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Full Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userProfile.name}
+                  onChangeText={(text) =>
+                    setUserProfile({ ...userProfile, name: text })
+                  }
+                  placeholder="Enter your name"
+                />
               </View>
 
-              <View style={styles.divider} />
-
-              {editMode ? (
-                <View style={styles.formContainer}>
-                  <View style={styles.formField}>
-                    <Text style={styles.fieldLabel}>Full Name</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={userProfile.name}
-                      onChangeText={(text) =>
-                        setUserProfile({ ...userProfile, name: text })
-                      }
-                      placeholder="Enter your name"
-                    />
-                  </View>
-
-                  <View style={styles.formField}>
-                    <Text style={styles.fieldLabel}>Phone Number</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={userProfile.phone}
-                      onChangeText={(text) =>
-                        setUserProfile({ ...userProfile, phone: text })
-                      }
-                      placeholder="Enter your phone number"
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-
-                  <View style={styles.formField}>
-                    <Text style={styles.fieldLabel}>Delivery Address</Text>
-                   
-                    <TextInput
-                  style={[styles.input, styles.addressInput]}
-                  value={userProfile.address}
-                  onChangeText={(text) => setUserProfile({...userProfile, address: text})}
-                  placeholder="Enter your delivery address"
-                  multiline
-                  numberOfLines={3}
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Phone Number</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userProfile.phone}
+                  onChangeText={(text) =>
+                    setUserProfile({ ...userProfile, phone: text })
+                  }
+                  placeholder="Enter your phone number"
+                  keyboardType="phone-pad"
                 />
-                  </View>
+              </View>
 
-                  <View style={styles.buttonRow}>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => setEditMode(false)}
-                      disabled={savingProfile}
-                    >
-                      <Text style={styles.cancelButtonText}>Cancel</Text>
-                    </TouchableOpacity>
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Delivery Address</Text>
+                <MapsSearchBar
+                  stylesPasses={[styles.input, styles.addressInput]}
+                  setUserProfile={setUserProfile}
+                  userProfile={userProfile}
+                  placeholderText={false}
+                  setDeliveryAddress={false}
+                />
+              </View>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.saveButton,
-                        savingProfile && styles.disabledButton,
-                      ]}
-                      onPress={handleSaveProfile}
-                      disabled={savingProfile}
-                    >
-                      {savingProfile ? (
-                        <ActivityIndicator size="small" color="white" />
-                      ) : (
-                        <Text style={styles.saveButtonText}>Save Changes</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.infoContainer}>
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoIcon}>
-                      <Ionicons name="call-outline" size={20} color="#4a6da7" />
-                    </View>
-                    <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Phone Number</Text>
-                      <Text style={styles.infoValue}>
-                        {userProfile.phone || "Not set"}
-                      </Text>
-                    </View>
-                  </View>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setEditMode(false)}
+                  disabled={savingProfile}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
 
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoIcon}>
-                      <Ionicons
-                        name="location-outline"
-                        size={20}
-                        color="#4a6da7"
-                      />
-                    </View>
-                    <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Delivery Address</Text>
-                      <Text style={styles.infoValue}>
-                        {userProfile.address || "Not set"}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
+                <TouchableOpacity
+                  style={[
+                    styles.saveButton,
+                    savingProfile && styles.disabledButton,
+                  ]}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Changes</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
+          ) : (
+            <View style={styles.infoContainer}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Ionicons name="call-outline" size={20} color="#4a6da7" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Phone Number</Text>
+                  <Text style={styles.infoValue}>
+                    {userProfile.phone || "Not set"}
+                  </Text>
+                </View>
+              </View>
 
-            <View style={styles.menuSection}>
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => navigation.navigate("Orders" as never)}
-              >
-                <View style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}>
-                  <Ionicons name="receipt-outline" size={22} color="#1976d2" />
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Ionicons name="location-outline" size={20} color="#4a6da7" />
                 </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuText}>My Orders</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Delivery Address</Text>
+                  <Text style={styles.infoValue}>
+                    {userProfile.address || "Not set"}
+                  </Text>
                 </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => navigation.navigate("Cart" as never)}
-              >
-                <View style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}>
-                  <Ionicons name="cart-outline" size={22} color="#388e3c" />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuText}>My Cart</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => setPasswordModal(true)}
-              >
-                <View style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={22}
-                    color="#f57c00"
-                  />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuText}>Change Password</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Alert.alert(
-                    "Contact Support",
-                    "Do you need help with your account?",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Call Support",
-                        onPress: () =>
-                          Alert.alert(
-                            "Support",
-                            "Customer support: +254-XXX-XXX-XXX"
-                          ),
-                      },
-                      {
-                        text: "Send Email",
-                        onPress: () =>
-                          Alert.alert("Email", "support@liquordash.com"),
-                      },
-                    ]
-                  );
-                }}
-              >
-                <View style={[styles.menuIcon, { backgroundColor: "#e1f5fe" }]}>
-                  <Ionicons
-                    name="help-circle-outline"
-                    size={22}
-                    color="#0288d1"
-                  />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuText}>Help & Support</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
-                </View>
-              </TouchableOpacity>
+              </View>
             </View>
+          )}
+        </View>
 
-            <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={() => {
-                Alert.alert("Logout", "Are you sure you want to logout?", [
+        <View style={styles.menuSection}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate("Orders" as never)}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}>
+              <Ionicons name="receipt-outline" size={22} color="#1976d2" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuText}>My Orders</Text>
+              <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate("Cart" as never)}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}>
+              <Ionicons name="cart-outline" size={22} color="#388e3c" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuText}>My Cart</Text>
+              <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => setPasswordModal(true)}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}>
+              <Ionicons name="lock-closed-outline" size={22} color="#f57c00" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuText}>Change Password</Text>
+              <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              Alert.alert(
+                "Contact Support",
+                "Do you need help with your account?",
+                [
                   { text: "Cancel", style: "cancel" },
                   {
-                    text: "Logout",
-                    style: "destructive",
-                    onPress: handleLogout,
+                    text: "Call Support",
+                    onPress: () =>
+                      Alert.alert(
+                        "Support",
+                        "Customer support: +254-XXX-XXX-XXX"
+                      ),
                   },
-                ]);
-              }}
-            >
-              <Ionicons name="log-out-outline" size={20} color="#f44336" />
-              <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      ></FlatList>
+                  {
+                    text: "Send Email",
+                    onPress: () =>
+                      Alert.alert("Email", "support@liquordash.com"),
+                  },
+                ]
+              );
+            }}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: "#e1f5fe" }]}>
+              <Ionicons name="help-circle-outline" size={22} color="#0288d1" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuText}>Help & Support</Text>
+              <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={() => {
+            Alert.alert("Logout", "Are you sure you want to logout?", [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Logout",
+                style: "destructive",
+                onPress: handleLogout,
+              },
+            ]);
+          }}
+        >
+          <Ionicons name="log-out-outline" size={20} color="#f44336" />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       {/* Change Password Modal */}
       <Modal
@@ -676,7 +673,7 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   addressInput: {
-    minHeight: 80,
+    // minHeight: 80,
     textAlignVertical: "top",
   },
   buttonRow: {

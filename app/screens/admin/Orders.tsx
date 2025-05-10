@@ -24,6 +24,8 @@ import {
   updateDoc,
   Timestamp
 } from 'firebase/firestore';
+//zustand
+import useStore from '../../../utils/useStore';
 
 type OrderItem = {
   id: string;
@@ -57,7 +59,9 @@ const AdminOrders = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
-  
+
+  //fetch function from zustand
+  const setOrdersStored = useStore((state) => state.setOrdersStored);
   useEffect(() => {
     // Fetch orders from Firestore
     const fetchOrders = () => {
@@ -99,6 +103,7 @@ const AdminOrders = () => {
             });
             
             setOrders(ordersList);
+            setOrdersStored(ordersList);
             setLoading(false);
           },
           (error) => {
