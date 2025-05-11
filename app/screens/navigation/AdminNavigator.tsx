@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from "@react-navigation/stack";
 import { Ionicons } from '@expo/vector-icons';
 
 // Import Admin Screens
@@ -10,8 +11,29 @@ import AdminProfile from '../admin/Profile';
 import CategoriesManagement from '../admin/CategoriesManagement'; 
 import AdminSales from '../admin/Sales';
 import AdminDeliveries from '../admin/Deliveries';
+import AssignDelivery from '../admin/AssignDelivery';
+import FindDeliveryPersonel from '../admin/FindDeliveryPersonel';
+
+
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
+
+
+const assignDeliveriesStack = () => {
+  return (
+    <Stack.Navigator screenOptions={{
+      headerShown:false,
+    }}
+    initialRouteName="Deliveries"
+    >
+      <Stack.Screen name="Deliveries" component={AdminDeliveries} />
+      <Stack.Screen name="AssignDeliveries" component={AssignDelivery} />
+      <Stack.Screen name="FindDeliveryPersonel" component={FindDeliveryPersonel} />
+    </Stack.Navigator>
+  );
+};
+
 
 const AdminNavigator = () => {
   return (
@@ -59,7 +81,7 @@ const AdminNavigator = () => {
     >
       <Tab.Screen name="Dashboard" component={AdminHome} />
       <Tab.Screen name="Orders" component={AdminOrders} />
-      <Tab.Screen name="Deliveries" component={AdminDeliveries} />
+      <Tab.Screen name="Deliveries" component={assignDeliveriesStack} />
       <Tab.Screen name="Products" component={AdminProducts} />
       <Tab.Screen name="Categories" component={CategoriesManagement} />
       <Tab.Screen name="Sales" component={AdminSales} />

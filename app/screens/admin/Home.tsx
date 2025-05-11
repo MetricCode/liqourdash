@@ -1,79 +1,84 @@
 // app/screens/admin/Home.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
-  SafeAreaView, 
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
   Image,
   ActivityIndicator,
   Alert,
   StatusBar,
   Dimensions,
   RefreshControl,
-  Animated
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { FIREBASE_DB, FIREBASE_AUTH } from '../../../FirebaseConfig';
-import { 
-  collection, 
-  getDocs, 
-  query, 
-  where, 
+  Animated,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { FIREBASE_DB, FIREBASE_AUTH } from "../../../FirebaseConfig";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
   orderBy,
   limit,
   getDoc,
   doc,
   updateDoc,
-  Timestamp
-} from 'firebase/firestore';
+  Timestamp,
+} from "firebase/firestore";
+//zustand
+import useStore from "../../../utils/useStore";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
-import { NavigationProp, useIsFocused } from '@react-navigation/native';
+import { NavigationProp, useIsFocused } from "@react-navigation/native";
 
 const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
+  //fetch function from zustand
+  const setOrdersStored = useStore((state) => state.setOrdersStored);
   // Animation values
   const [fadeAnim] = useState(new Animated.Value(0));
   const [headerScaleAnim] = useState(new Animated.Value(0.95));
   const [cardsScaleAnim] = useState(new Animated.Value(0.97));
-  
+
   // Stats state
   const [stats, setStats] = useState({
     totalSales: 0,
     totalOrders: 0,
     pendingDeliveries: 0,
-    outOfStock: 0
+    outOfStock: 0,
   });
-  
+
   // Recent orders state
-  const [recentOrders, setRecentOrders] = useState<{
-    id: string;
-    orderNumber: string;
-    customerName: string;
-    total: number;
-    items: number;
-    status: string;
-    date: string;
-  }[]>([]);
-  
-  
+  const [recentOrders, setRecentOrders] = useState<
+    {
+      id: string;
+      orderNumber: string;
+      customerName: string;
+      total: number;
+      items: number;
+      status: string;
+      date: string;
+    }[]
+  >([]);
+
   // Loading states
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  
+
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
 
   // Get admin name
-  const [adminName, setAdminName] = useState('');
-  
+  const [adminName, setAdminName] = useState("");
+
   // Check if screen is focused
   const isFocused = useIsFocused();
-  
+
   // Handle animations
   useEffect(() => {
     if (isFocused) {
@@ -81,18 +86,18 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 800,
-          useNativeDriver: true
+          useNativeDriver: true,
         }),
         Animated.timing(headerScaleAnim, {
           toValue: 1,
           duration: 500,
-          useNativeDriver: true
+          useNativeDriver: true,
         }),
         Animated.timing(cardsScaleAnim, {
           toValue: 1,
           duration: 700,
-          useNativeDriver: true
-        })
+          useNativeDriver: true,
+        }),
       ]).start();
     } else {
       // Reset animations when screen loses focus
@@ -101,114 +106,117 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
       cardsScaleAnim.setValue(0.97);
     }
   }, [isFocused, fadeAnim, headerScaleAnim, cardsScaleAnim]);
-  
+
   // Fetch all data
   const fetchAllData = useCallback(async () => {
     await fetchAdminName();
     await fetchStats();
     await fetchRecentOrders();
   }, []);
-  
+
   // Pull-to-refresh function
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await fetchAllData();
     } catch (error) {
-      console.error('Error refreshing data:', error);
-      Alert.alert('Error', 'Failed to refresh data. Please try again.');
+      console.error("Error refreshing data:", error);
+      Alert.alert("Error", "Failed to refresh data. Please try again.");
     } finally {
       setRefreshing(false);
     }
   }, [fetchAllData]);
-  
+
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData, isFocused]);
-  
+
   const fetchAdminName = async () => {
     const user = FIREBASE_AUTH.currentUser;
     if (user) {
       if (user.displayName) {
         setAdminName(user.displayName);
       } else if (user.email) {
-        setAdminName(user.email.split('@')[0]);
+        setAdminName(user.email.split("@")[0]);
       }
     }
   };
-  
+
   const fetchStats = async () => {
     try {
       setLoadingStats(true);
-      
+
       // Get orders and calculate stats
-      const ordersRef = collection(FIREBASE_DB, 'orders');
+      const ordersRef = collection(FIREBASE_DB, "orders");
       const ordersSnapshot = await getDocs(ordersRef);
-      
+
       let totalSales = 0;
       let totalPendingOrders = 0;
       let pendingDeliveries = 0;
-      
-      ordersSnapshot.forEach(doc => {
+
+      ordersSnapshot.forEach((doc) => {
         const orderData = doc.data();
-        const status = orderData.status || '';
-        
+        const status = orderData.status || "";
+
         // Only count non-cancelled orders
-        if (status.toLowerCase() !== 'cancelled') {
+        if (status.toLowerCase() !== "cancelled") {
           // Add to sales total only for non-cancelled orders
           if (orderData.total) {
             totalSales += orderData.total;
           }
-          
+
           // Count pending or processing orders for pending deliveries
-          if (status.toLowerCase() === 'pending' || status.toLowerCase() === 'processing') {
+          if (
+            status.toLowerCase() === "pending" ||
+            status.toLowerCase() === "processing"
+          ) {
             pendingDeliveries++;
             totalPendingOrders++;
-          } else if (status.toLowerCase() !== 'cancelled') {
+          } else if (status.toLowerCase() !== "cancelled") {
             // Count completed/delivered orders for total orders (but not cancelled)
             totalPendingOrders++;
           }
         }
       });
-      
+
       // Get out of stock products
-      const productsRef = collection(FIREBASE_DB, 'products');
-      const outOfStockQuery = query(productsRef, where('inStock', '<=', 0));
+      const productsRef = collection(FIREBASE_DB, "products");
+      const outOfStockQuery = query(productsRef, where("inStock", "<=", 0));
       const outOfStockSnapshot = await getDocs(outOfStockQuery);
-      
+
       setStats({
         totalSales,
         totalOrders: totalPendingOrders,
         pendingDeliveries,
-        outOfStock: outOfStockSnapshot.size
+        outOfStock: outOfStockSnapshot.size,
       });
-      
+
       setLoadingStats(false);
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error("Error fetching stats:", error);
       setLoadingStats(false);
-      
+
       // For demo purposes, set some default stats if real data fails
       setStats({
         totalSales: 12580.45,
         totalOrders: 156,
         pendingDeliveries: 23,
-        outOfStock: 7
+        outOfStock: 7,
       });
     }
   };
-  
+
   const fetchRecentOrders = async () => {
     try {
       setLoadingOrders(true);
-      
-      const ordersRef = collection(FIREBASE_DB, 'orders');
+
+      const ordersRef = collection(FIREBASE_DB, "orders");
       const recentOrdersQuery = query(
-        ordersRef, 
-        orderBy('createdAt', 'desc'), 
+        ordersRef,
+        orderBy("createdAt", "desc"),
         limit(3)
       );
-      
+
       const snapshot = await getDocs(recentOrdersQuery);
       const orders: {
         id: string;
@@ -218,167 +226,190 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
         items: number;
         status: string;
         date: string;
+        deliveryFee: number;
+        createdAt: Timestamp;
+        customerInfo: {};
       }[] = [];
-      
-      snapshot.forEach(doc => {
+
+      snapshot.forEach((doc) => {
         const orderData = doc.data();
         orders.push({
           id: doc.id,
           orderNumber: doc.id.slice(-5).toUpperCase(),
-          customerName: orderData.customerInfo?.name || 'Unknown Customer',
+          customerName: orderData.customerInfo?.name || "Unknown Customer",
           total: orderData.total || 0,
           items: orderData.items?.length || 0,
-          status: orderData.status || 'pending',
-          date: orderData.createdAt ? new Date(orderData.createdAt.toDate()).toLocaleDateString() : 'Unknown date'
+          status: orderData.status || "pending",
+          date: orderData.createdAt
+            ? new Date(orderData.createdAt.toDate()).toLocaleDateString()
+            : "Unknown date",
+          deliveryFee: orderData.deliveryFee || 0,
+          createdAt: orderData.createdAt,
+          customerInfo: orderData.customerInfo || {
+            name: "Unknown",
+            address: "No address",
+            phone: "No phone",
+          },
         });
       });
-      
+
       setRecentOrders(orders);
+      console.log("Recent Orders:", orders);
+      setOrdersStored(orders);
       setLoadingOrders(false);
     } catch (error) {
-      console.error('Error fetching recent orders:', error);
+      console.error("Error fetching recent orders:", error);
       setLoadingOrders(false);
-      
+
       // For demo purposes
       setRecentOrders([
         {
-          id: '1',
-          orderNumber: '10343',
-          customerName: 'John Doe',
+          id: "1",
+          orderNumber: "10343",
+          customerName: "John Doe",
           total: 89.99,
           items: 3,
-          status: 'pending',
-          date: 'May 2, 2025'
+          status: "pending",
+          date: "May 2, 2025",
         },
         {
-          id: '2',
-          orderNumber: '10342',
-          customerName: 'Sara Smith',
-          total: 105.50,
+          id: "2",
+          orderNumber: "10342",
+          customerName: "Sara Smith",
+          total: 105.5,
           items: 5,
-          status: 'processing',
-          date: 'May 1, 2025'
+          status: "processing",
+          date: "May 1, 2025",
         },
         {
-          id: '3',
-          orderNumber: '10341',
-          customerName: 'Robert Johnson',
+          id: "3",
+          orderNumber: "10341",
+          customerName: "Robert Johnson",
           total: 67.25,
           items: 2,
-          status: 'completed',
-          date: 'Apr 30, 2025'
-        }
+          status: "completed",
+          date: "Apr 30, 2025",
+        },
       ]);
     }
   };
-  
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending':
-        return { bg: '#fff3e0', text: '#f57c00' };
-      case 'processing':
-        return { bg: '#e3f2fd', text: '#1976d2' };
-      case 'delivered':
-      case 'completed':
-        return { bg: '#e8f5e9', text: '#388e3c' };
-      case 'cancelled':
-        return { bg: '#ffebee', text: '#d32f2f' };
+      case "pending":
+        return { bg: "#fff3e0", text: "#f57c00" };
+      case "processing":
+        return { bg: "#e3f2fd", text: "#1976d2" };
+      case "delivered":
+      case "completed":
+        return { bg: "#e8f5e9", text: "#388e3c" };
+      case "cancelled":
+        return { bg: "#ffebee", text: "#d32f2f" };
       default:
-        return { bg: '#f5f5f5', text: '#757575' };
+        return { bg: "#f5f5f5", text: "#757575" };
     }
   };
-  
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+
+  const handleUpdateOrderStatus = async (
+    orderId: string,
+    newStatus: string
+  ) => {
     try {
       setLoadingOrders(true);
-      
+
       // Update the order status in Firestore
-      const orderRef = doc(FIREBASE_DB, 'orders', orderId);
+      const orderRef = doc(FIREBASE_DB, "orders", orderId);
       await updateDoc(orderRef, {
         status: newStatus,
-        updatedAt: Timestamp.now()
+        updatedAt: Timestamp.now(),
       });
-      
+
       // Update the local state to reflect the change
-      setRecentOrders(prevOrders => 
-        prevOrders.map(order => 
+      setRecentOrders((prevOrders) =>
+        prevOrders.map((order) =>
           order.id === orderId ? { ...order, status: newStatus } : order
         )
       );
-      
-      Alert.alert('Success', `Order status updated to ${newStatus}`);
-      
+
+      Alert.alert("Success", `Order status updated to ${newStatus}`);
+
       // Refresh data
       await fetchRecentOrders();
       await fetchStats();
     } catch (error) {
-      console.error('Error updating order status:', error);
-      Alert.alert('Error', 'Failed to update order status. Please try again.');
+      console.error("Error updating order status:", error);
+      Alert.alert("Error", "Failed to update order status. Please try again.");
     } finally {
       setLoadingOrders(false);
     }
   };
-  
+
   const navigateToOrderDetails = (orderId: string) => {
     // Navigate to the Orders tab first, then pass parameters
-    navigation.navigate('Orders', { orderId });
+    navigation.navigate("Orders", { orderId });
   };
-  
+
   const navigateToProductDetails = (productId: string, action?: string) => {
     // Navigate to the Products tab first, then pass parameters
-    navigation.navigate('Products', { productId, action });
+    navigation.navigate("Products", { productId, action });
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      
-      <Animated.View 
+
+      <Animated.View
         style={[
           styles.header,
           {
             opacity: fadeAnim,
-            transform: [{ scale: headerScaleAnim }]
-          }
+            transform: [{ scale: headerScaleAnim }],
+          },
         ]}
       >
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Admin Dashboard</Text>
-          {adminName && <Text style={styles.welcomeText}>Welcome, {adminName}</Text>}
+          {adminName && (
+            <Text style={styles.welcomeText}>Welcome, {adminName}</Text>
+          )}
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerButton}
-            onPress={() => navigation.navigate('Profile')}
+            onPress={() => navigation.navigate("Profile")}
           >
             <Ionicons name="person-outline" size={24} color="#4a6da7" />
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerButton}
-            onPress={() => Alert.alert('Notifications', 'You have no new notifications')}
+            onPress={() =>
+              Alert.alert("Notifications", "You have no new notifications")
+            }
           >
             <Ionicons name="notifications-outline" size={24} color="#4a6da7" />
           </TouchableOpacity>
         </View>
       </Animated.View>
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#4a6da7']}
+            colors={["#4a6da7"]}
             tintColor="#4a6da7"
             title="Refreshing dashboard..."
             titleColor="#666"
           />
         }
       >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
+        <Animated.View
+          style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}
+        >
           <Text style={styles.sectionTitle}>Overview</Text>
-          
+
           {loadingStats ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#4a6da7" />
@@ -386,86 +417,112 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
             </View>
           ) : (
             <View style={styles.statsContainer}>
-              <TouchableOpacity 
-                style={[styles.statCard, { backgroundColor: '#e8f5e9' }]}
-                onPress={() => navigation.navigate('Sales')}
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: "#e8f5e9" }]}
+                onPress={() => navigation.navigate("Sales")}
               >
-                <Text style={styles.statValue}>${stats.totalSales.toFixed(2)}</Text>
+                <Text style={styles.statValue}>
+                  ${stats.totalSales.toFixed(2)}
+                </Text>
                 <Text style={styles.statLabel}>Total Sales</Text>
-                <Ionicons name="cash-outline" size={24} color="#388e3c" style={styles.statIcon} />
+                <Ionicons
+                  name="cash-outline"
+                  size={24}
+                  color="#388e3c"
+                  style={styles.statIcon}
+                />
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}
-                onPress={() => navigation.navigate('Orders')}
+
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: "#e3f2fd" }]}
+                onPress={() => navigation.navigate("Orders")}
               >
                 <Text style={styles.statValue}>{stats.totalOrders}</Text>
                 <Text style={styles.statLabel}>Total Orders</Text>
-                <Ionicons name="list-outline" size={24} color="#1976d2" style={styles.statIcon} />
+                <Ionicons
+                  name="list-outline"
+                  size={24}
+                  color="#1976d2"
+                  style={styles.statIcon}
+                />
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.statCard, { backgroundColor: '#fff3e0' }]}
-                onPress={() => navigation.navigate('Deliveries')}
+
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: "#fff3e0" }]}
+                onPress={() => navigation.navigate("Deliveries")}
               >
                 <Text style={styles.statValue}>{stats.pendingDeliveries}</Text>
                 <Text style={styles.statLabel}>Pending Deliveries</Text>
-                <Ionicons name="car-outline" size={24} color="#f57c00" style={styles.statIcon} />
+                <Ionicons
+                  name="car-outline"
+                  size={24}
+                  color="#f57c00"
+                  style={styles.statIcon}
+                />
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.statCard, { backgroundColor: '#ffebee' }]}
-                onPress={() => navigation.navigate('Products', { filter: 'outOfStock' })}
+
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: "#ffebee" }]}
+                onPress={() =>
+                  navigation.navigate("Products", { filter: "outOfStock" })
+                }
               >
                 <Text style={styles.statValue}>{stats.outOfStock}</Text>
                 <Text style={styles.statLabel}>Out of Stock</Text>
-                <Ionicons name="alert-circle-outline" size={24} color="#c62828" style={styles.statIcon} />
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={24}
+                  color="#c62828"
+                  style={styles.statIcon}
+                />
               </TouchableOpacity>
             </View>
           )}
         </Animated.View>
 
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
+        <Animated.View
+          style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}
+        >
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
           </View>
-          
+
           <View style={styles.actionsContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigation.navigate('Products', { action: 'add' })}
+              onPress={() => navigation.navigate("Products", { action: "add" })}
             >
-              <View style={[styles.actionIcon, { backgroundColor: '#e3f2fd' }]}>
+              <View style={[styles.actionIcon, { backgroundColor: "#e3f2fd" }]}>
                 <Ionicons name="add-circle-outline" size={24} color="#1976d2" />
               </View>
               <Text style={styles.actionText}>Add Product</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigation.navigate('Categories')}
+              onPress={() => navigation.navigate("Categories")}
             >
-              <View style={[styles.actionIcon, { backgroundColor: '#f3e5f5' }]}>
+              <View style={[styles.actionIcon, { backgroundColor: "#f3e5f5" }]}>
                 <Ionicons name="pricetag-outline" size={24} color="#7b1fa2" />
               </View>
               <Text style={styles.actionText}>Categories</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigation.navigate('Orders')}
+              onPress={() => navigation.navigate("Orders")}
             >
-              <View style={[styles.actionIcon, { backgroundColor: '#e8f5e9' }]}>
+              <View style={[styles.actionIcon, { backgroundColor: "#e8f5e9" }]}>
                 <Ionicons name="list-outline" size={24} color="#388e3c" />
               </View>
               <Text style={styles.actionText}>Orders</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigation.navigate('Deliveries')}
+              onPress={() => navigation.navigate("Deliveries")}
             >
-              <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
+              <View style={[styles.actionIcon, { backgroundColor: "#fff3e0" }]}>
                 <Ionicons name="car-outline" size={24} color="#f57c00" />
               </View>
               <Text style={styles.actionText}>Deliveries</Text>
@@ -473,14 +530,16 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
           </View>
         </Animated.View>
 
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Orders</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Orders')}>
-            <Text style={styles.seeAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-          
+        <Animated.View
+          style={{ opacity: fadeAnim, transform: [{ scale: cardsScaleAnim }] }}
+        >
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Orders</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Orders")}>
+              <Text style={styles.seeAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
           {loadingOrders ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#4a6da7" />
@@ -492,38 +551,57 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
                 <View style={styles.emptyStateContainer}>
                   <Ionicons name="receipt-outline" size={60} color="#ddd" />
                   <Text style={styles.emptyStateText}>No recent orders</Text>
-                  <Text style={styles.emptyStateSubtext}>New orders will appear here</Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    New orders will appear here
+                  </Text>
                 </View>
               ) : (
                 recentOrders.map((order, index) => {
                   const statusStyle = getStatusColor(order.status);
-                  
+
                   return (
-                    <TouchableOpacity 
-                      key={order.id} 
+                    <TouchableOpacity
+                      key={order.id}
                       style={[
                         styles.orderCard,
-                        index === recentOrders.length - 1 && { marginBottom: 5 }
+                        index === recentOrders.length - 1 && {
+                          marginBottom: 5,
+                        },
                       ]}
                       onPress={() => navigateToOrderDetails(order.id)}
                     >
                       <View style={styles.orderHeader}>
-                        <Text style={styles.orderNumber}>Order #{order.orderNumber}</Text>
-                        <View style={[styles.orderStatus, { backgroundColor: statusStyle.bg }]}>
-                          <Text style={[styles.orderStatusText, { color: statusStyle.text }]}>
-                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                        <Text style={styles.orderNumber}>
+                          Order #{order.orderNumber}
+                        </Text>
+                        <View
+                          style={[
+                            styles.orderStatus,
+                            { backgroundColor: statusStyle.bg },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.orderStatusText,
+                              { color: statusStyle.text },
+                            ]}
+                          >
+                            {order.status.charAt(0).toUpperCase() +
+                              order.status.slice(1)}
                           </Text>
                         </View>
                       </View>
-                      
+
                       <View style={styles.orderDetails}>
                         <Text style={styles.orderDetail}>
-                          <Text style={styles.orderDetailLabel}>Customer: </Text>
+                          <Text style={styles.orderDetailLabel}>
+                            Customer:{" "}
+                          </Text>
                           {order.customerName}
                         </Text>
                         <Text style={styles.orderDetail}>
-                          <Text style={styles.orderDetailLabel}>Total: </Text>
-                          ${order.total.toFixed(2)}
+                          <Text style={styles.orderDetailLabel}>Total: </Text>$
+                          {order.total.toFixed(2)}
                         </Text>
                         <Text style={styles.orderDetail}>
                           <Text style={styles.orderDetailLabel}>Items: </Text>
@@ -534,58 +612,76 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
                           {order.date}
                         </Text>
                       </View>
-                      
+
                       <View style={styles.orderActions}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           style={styles.orderActionButton}
                           onPress={() => navigateToOrderDetails(order.id)}
                         >
-                          <Text style={styles.orderActionText}>View Details</Text>
+                          <Text style={styles.orderActionText}>
+                            View Details
+                          </Text>
                         </TouchableOpacity>
-                        
-                        <TouchableOpacity 
-                          style={[styles.orderActionButton, styles.orderActionButtonSecondary]}
+
+                        <TouchableOpacity
+                          style={[
+                            styles.orderActionButton,
+                            styles.orderActionButtonSecondary,
+                          ]}
                           onPress={() => {
-                            if (order.status === 'pending') {
+                            if (order.status === "pending") {
                               Alert.alert(
-                                'Update Status', 
-                                'This will mark the order as processing. Continue?', 
+                                "Update Status",
+                                "This will mark the order as processing. Continue?",
                                 [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  { 
-                                    text: 'Update', 
-                                    onPress: () => handleUpdateOrderStatus(order.id, 'processing')
-                                  }
+                                  { text: "Cancel", style: "cancel" },
+                                  {
+                                    text: "Update",
+                                    onPress: () =>
+                                      handleUpdateOrderStatus(
+                                        order.id,
+                                        "processing"
+                                      ),
+                                  },
                                 ]
                               );
-                            } else if (order.status === 'processing') {
+                            } else if (order.status === "processing") {
                               Alert.alert(
-                                'Update Status', 
-                                'This will mark the order as delivered. Continue?', 
+                                "Update Status",
+                                "This will mark the order as delivered. Continue?",
                                 [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  { 
-                                    text: 'Update', 
-                                    onPress: () => handleUpdateOrderStatus(order.id, 'delivered')
-                                  }
+                                  { text: "Cancel", style: "cancel" },
+                                  {
+                                    text: "Update",
+                                    onPress: () =>
+                                      handleUpdateOrderStatus(
+                                        order.id,
+                                        "delivered"
+                                      ),
+                                  },
                                 ]
                               );
                             } else {
                               Alert.alert(
-                                'Print Receipt', 
-                                'Print receipt for order #' + order.orderNumber,
+                                "Print Receipt",
+                                "Print receipt for order #" + order.orderNumber,
                                 [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  { text: 'Print', onPress: () => console.log('Print receipt') }
+                                  { text: "Cancel", style: "cancel" },
+                                  {
+                                    text: "Print",
+                                    onPress: () => console.log("Print receipt"),
+                                  },
                                 ]
                               );
                             }
                           }}
                         >
                           <Text style={styles.orderActionTextSecondary}>
-                            {order.status === 'pending' ? 'Process Order' : 
-                             order.status === 'processing' ? 'Mark Delivered' : 
-                             'Print Receipt'}
+                            {order.status === "pending"
+                              ? "Process Order"
+                              : order.status === "processing"
+                              ? "Mark Delivered"
+                              : "Print Receipt"}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -593,11 +689,11 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
                   );
                 })
               )}
-              
+
               {recentOrders.length > 0 && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.viewAllButton}
-                  onPress={() => navigation.navigate('Orders')}
+                  onPress={() => navigation.navigate("Orders")}
                 >
                   <Text style={styles.viewAllText}>View All Orders</Text>
                   <Ionicons name="arrow-forward" size={18} color="#4a6da7" />
@@ -611,33 +707,21 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
   );
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: "#f8f9fa",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    shadowColor: '#000',
+    borderBottomColor: "#f0f0f0",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 5,
@@ -648,24 +732,24 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   welcomeText: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginTop: 4,
   },
   headerActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   headerButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#f5f5f5",
+    justifyContent: "center",
+    alignItems: "center",
     marginLeft: 10,
   },
   content: {
@@ -674,42 +758,42 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 10,
-    color: '#666',
+    color: "#666",
     fontSize: 14,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 25,
     marginBottom: 15,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 15,
   },
   seeAllText: {
-    color: '#4a6da7',
+    color: "#4a6da7",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   statsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   statCard: {
-    width: '48%',
+    width: "48%",
     borderRadius: 16,
     padding: 15,
     marginBottom: 15,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -717,33 +801,33 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 5,
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   statIcon: {
-    position: 'absolute',
+    position: "absolute",
     top: 15,
     right: 15,
   },
   actionsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     marginBottom: 10,
   },
   actionButton: {
-    width: '48%',
-    alignItems: 'center',
+    width: "48%",
+    alignItems: "center",
     marginBottom: 15,
     paddingVertical: 15,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -753,39 +837,39 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 10,
   },
   actionText: {
     fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
+    color: "#333",
+    fontWeight: "500",
   },
   ordersContainer: {
     marginBottom: 10,
   },
   orderCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
     padding: 15,
     marginBottom: 15,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
   },
   orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 12,
   },
   orderNumber: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   orderStatus: {
     paddingHorizontal: 10,
@@ -794,58 +878,58 @@ const styles = StyleSheet.create({
   },
   orderStatusText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   orderDetails: {
     marginBottom: 15,
   },
   orderDetail: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginBottom: 4,
   },
   orderDetailLabel: {
-    fontWeight: '600',
-    color: '#555',
+    fontWeight: "600",
+    color: "#555",
   },
   orderActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   orderActionButton: {
-    backgroundColor: '#4a6da7',
+    backgroundColor: "#4a6da7",
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
     flex: 0.48,
-    alignItems: 'center',
+    alignItems: "center",
   },
   orderActionButtonSecondary: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: '#4a6da7',
+    borderColor: "#4a6da7",
   },
   orderActionText: {
-    color: 'white',
-    fontWeight: '600',
+    color: "white",
+    fontWeight: "600",
     fontSize: 14,
   },
   orderActionTextSecondary: {
-    color: '#4a6da7',
-    fontWeight: '600',
+    color: "#4a6da7",
+    fontWeight: "600",
     fontSize: 14,
   },
   viewAllButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: 12,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
     borderRadius: 10,
   },
   viewAllText: {
-    color: '#4a6da7',
-    fontWeight: '600',
+    color: "#4a6da7",
+    fontWeight: "600",
     fontSize: 14,
     marginRight: 5,
   },
@@ -855,26 +939,26 @@ const styles = StyleSheet.create({
   },
   productCard: {
     width: 180,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
     marginRight: 15,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
   },
   productImageContainer: {
-    position: 'relative',
+    position: "relative",
   },
   productImage: {
-    width: '100%',
+    width: "100%",
     height: 130,
-    resizeMode: 'cover',
+    resizeMode: "cover",
   },
   stockBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 10,
     right: 10,
     paddingHorizontal: 8,
@@ -882,102 +966,102 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   lowStockBadge: {
-    backgroundColor: '#fff3e0',
+    backgroundColor: "#fff3e0",
   },
   criticalStockBadge: {
-    backgroundColor: '#ffebee',
+    backgroundColor: "#ffebee",
   },
   stockText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#c62828',
+    fontWeight: "600",
+    color: "#c62828",
   },
   productDetails: {
     padding: 12,
   },
   productName: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 4,
   },
   productCategory: {
     fontSize: 13,
-    color: '#666',
+    color: "#666",
     marginBottom: 4,
   },
   productPrice: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#4a6da7',
+    fontWeight: "bold",
+    color: "#4a6da7",
   },
   updateStockButton: {
-    backgroundColor: '#e3f2fd',
+    backgroundColor: "#e3f2fd",
     paddingVertical: 10,
-    alignItems: 'center',
+    alignItems: "center",
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: "#f0f0f0",
   },
   updateStockText: {
-    color: '#1976d2',
+    color: "#1976d2",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   viewMoreProductsCard: {
     width: 150,
     height: 240,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
     borderRadius: 16,
     marginRight: 15,
   },
   viewMoreText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#4a6da7',
+    fontWeight: "600",
+    color: "#4a6da7",
     marginTop: 10,
-    textAlign: 'center',
+    textAlign: "center",
     paddingHorizontal: 10,
   },
   emptyStateContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 40,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: "#f9f9f9",
     borderRadius: 16,
     marginBottom: 15,
   },
   emptyStateText: {
     fontSize: 17,
-    fontWeight: 'bold',
-    color: '#555',
+    fontWeight: "bold",
+    color: "#555",
     marginTop: 10,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#888',
+    color: "#888",
     marginTop: 5,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptyProductsContainer: {
     width: 250,
     height: 240,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f9f9f9",
     borderRadius: 16,
     marginRight: 15,
   },
   emptyProductsText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#555',
+    fontWeight: "bold",
+    color: "#555",
     marginTop: 10,
   },
   emptyProductsSubtext: {
     fontSize: 14,
-    color: '#888',
+    color: "#888",
     marginTop: 5,
   },
 });

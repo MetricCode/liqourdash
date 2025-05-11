@@ -7,7 +7,7 @@ import MapViewStyle from "../../../utils/MapViewStyle.json";
 
 //zustand
 import useStore from "../../../utils/useStore";
-import MapsSearchBar from "../shared/MapsSearchBar";
+import MapsSearchBar from "./MapsSearchBar";
 
 const Map = () => {
   const location = useStore((state) => state.myStoredLocation);
@@ -31,13 +31,12 @@ const Map = () => {
               longitude: location.longitude,
             }}
           >
-            <Image
+            {/* <Image
               source={require("../../../utils/images/deliveryDriverPng.png")}
               style={{ width: 40, height: 40 }}
-            />
+            /> */}
           </Marker>
         </MapView>
-       
       </View>
     )
   );

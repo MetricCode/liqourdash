@@ -29,7 +29,6 @@ const MapsSearchBar = ({
   return (
     <View>
       <GooglePlacesAutocomplete
-        placeholder={placeholderText || "Enter your delivery address"}
         fetchDetails={true}
         debounce={200}
         enablePoweredByContainer={false}
@@ -99,7 +98,9 @@ const MapsSearchBar = ({
         }}
         textInputProps={{
           placeholderTextColor: placeholderText ? "black" : "gray",
+          placeholder: placeholderText || "Enter your delivery address",
         }}
+        
       />
     </View>
   );

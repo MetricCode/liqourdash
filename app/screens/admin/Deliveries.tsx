@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 const deliveriesData = [
   {
@@ -43,7 +44,9 @@ const deliveriesData = [
 ];
 
 const AdminDeliveries = () => {
+  const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('all');
+
   
   const getFilteredDeliveries = () => {
     if (activeTab === 'all') return deliveriesData;
@@ -58,6 +61,7 @@ const AdminDeliveries = () => {
     deliveryPerson: string;
     status: string;
     estimatedDelivery: string;
+    
   }
   
   const renderDeliveryItem = ({ item }: { item: DeliveryItem }) => (
@@ -106,7 +110,12 @@ const AdminDeliveries = () => {
           <Text style={styles.primaryButtonText}>View Details</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.secondaryButton}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => {
+          if(item.status === 'unassigned') {
+            // Navigate to Assign Delivery screen
+            navigation.navigate("AssignDeliveries", { deliveryItem:item });
+          } 
+        }}>
           <Text style={styles.secondaryButtonText}>
             {item.status === 'unassigned' ? 'Assign Delivery' : 
              item.status === 'pending' || item.status === 'in-transit' ? 'Track' : 

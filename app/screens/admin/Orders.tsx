@@ -24,7 +24,6 @@ import {
   updateDoc,
   Timestamp
 } from 'firebase/firestore';
-//zustand
 import useStore from '../../../utils/useStore';
 
 type OrderItem = {
@@ -60,8 +59,8 @@ const AdminOrders = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
 
-  //fetch function from zustand
   const setOrdersStored = useStore((state) => state.setOrdersStored);
+  
   useEffect(() => {
     // Fetch orders from Firestore
     const fetchOrders = () => {
@@ -96,6 +95,7 @@ const AdminOrders = () => {
                     address: 'No address',
                     phone: 'No phone'
                   }
+                  
                 });
               } catch (error) {
                 console.error('Error processing order document:', doc.id, error);
@@ -103,7 +103,7 @@ const AdminOrders = () => {
             });
             
             setOrders(ordersList);
-            setOrdersStored(ordersList);
+            setOrdersStored(ordersList)
             setLoading(false);
           },
           (error) => {

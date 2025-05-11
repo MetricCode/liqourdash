@@ -158,7 +158,6 @@ export default function App() {
       setLocation(location);
       setMyStoredLocation(location);
     }
-
     getCurrentLocation();
   }, []);
 
