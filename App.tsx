@@ -146,6 +146,7 @@ export default function App() {
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const setMyStoredLocation = useStore((state) => state.setMyStoredLocation);
+  const setLocationToDeliverFrom = useStore((state) => state.setLocationToDeliverFrom);
   useEffect(() => {
     async function getCurrentLocation() {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -157,6 +158,7 @@ export default function App() {
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
       setMyStoredLocation(location);
+      setLocationToDeliverFrom(location);
     }
     getCurrentLocation();
   }, []);

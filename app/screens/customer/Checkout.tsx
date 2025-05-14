@@ -349,10 +349,15 @@ const Checkout = () => {
             <Text style={styles.inputLabel}>Delivery Address</Text>
             <MapsSearchBar
               stylesPasses={[styles.input, styles.textArea]}
-              setUserProfile={setUserProfile}
-              userProfile={userProfile}
               placeholderText={deliveryAddress}
-              setDeliveryAddress={setDeliveryAddress}
+              onSelectFunction={(data, details) => {
+                setDeliveryAddress(data.description);
+                setUserProfile({
+                  ...userProfile,
+                  address: data.description,
+                  position: details.geometry.location,
+                });
+              }}
             />
             {/* <TextInput
               style={[styles.input, styles.textArea]}

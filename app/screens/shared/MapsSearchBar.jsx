@@ -2,14 +2,16 @@ import React from "react";
 import { View, Text } from "react-native";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import useStore from "../../../utils/useStore";
-import Icon from "react-native-vector-icons/MaterialIcons"; // or any other icon set you prefer
+
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
 const MapsSearchBar = ({
   stylesPasses,
-  setUserProfile,
-  userProfile,
+  inputContainerStyle,
   placeholderText,
-  setDeliveryAddress,
+  onSelectFunction,
+  Icon,
+  iconName,
 }) => {
   const currentLocation = useStore((state) => state.myStoredLocation);
 
@@ -32,7 +34,7 @@ const MapsSearchBar = ({
         fetchDetails={true}
         debounce={200}
         enablePoweredByContainer={false}
-        nearbyPlacesAPI="GooglePlacesSearch"
+        nearbyPlacesAPI="GoogleReverseGeocoding"
         minLength={2}
         timeout={10000}
         keyboardShouldPersistTaps="handled"
@@ -41,15 +43,16 @@ const MapsSearchBar = ({
         currentLocation={false}
         currentLocationLabel="Current location"
         enableHighAccuracyLocation={true}
+        filterReverseGeocodingByTypes={[]}
         predefinedPlaces={predefinedPlaces}
         predefinedPlacesAlwaysVisible={true}
         renderRow={(rowData) => {
           return (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               {rowData.description === "My Current location" && (
-                <Icon
-                  name="my-location"
-                  size={20}
+                <MaterialCommunityIcons
+                  name="crosshairs-gps"
+                  size={24}
                   color="black"
                   style={{ marginRight: 10 }}
                 />
@@ -75,6 +78,7 @@ const MapsSearchBar = ({
             backgroundColor: "white",
           },
           textInput: stylesPasses,
+          textInputContainer: inputContainerStyle,
         }}
         query={{
           key: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
@@ -84,23 +88,18 @@ const MapsSearchBar = ({
           radius: 30000,
         }}
         onPress={(data, details = null) => {
-          setUserProfile({
-            ...userProfile,
-            address: data.description,
-            position: details.geometry.location,
-          });
-          if (placeholderText) {
-            setDeliveryAddress(data.description);
-          }
+          onSelectFunction(data, details);
         }}
         GooglePlacesSearchQuery={{
           rankby: "distance",
         }}
         textInputProps={{
-          placeholderTextColor: placeholderText ? "black" : "gray",
+          placeholderTextColor: "gray",
           placeholder: placeholderText || "Enter your delivery address",
         }}
-        
+        renderLeftButton={() => (
+          <>{Icon ? <Icon name={iconName} size={24} color="black" /> : <></>}</>
+        )}
       />
     </View>
   );

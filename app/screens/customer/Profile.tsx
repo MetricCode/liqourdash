@@ -41,14 +41,14 @@ const CustomerProfile = () => {
   const currentLocation = useStore((state) => state.myStoredLocation);
   useEffect(() => {
     console.log("current location", currentLocation);
-   }, [currentLocation]);
- 
+  }, [currentLocation]);
+
   const [userProfile, setUserProfile] = useState({
     name: user?.displayName || "",
     email: user?.email || "",
     phone: "",
     address: "",
-    position:{}
+    position: {},
   });
 
   useEffect(() => {
@@ -303,10 +303,14 @@ const CustomerProfile = () => {
                 <Text style={styles.fieldLabel}>Delivery Address</Text>
                 <MapsSearchBar
                   stylesPasses={[styles.input, styles.addressInput]}
-                  setUserProfile={setUserProfile}
-                  userProfile={userProfile}
                   placeholderText={false}
-                  setDeliveryAddress={false}
+                  onSelectFunction={(data, details) => {
+                    setUserProfile({
+                      ...userProfile,
+                      address: data.description,
+                      position: details.geometry.location,
+                    });
+                  }}
                 />
               </View>
 
