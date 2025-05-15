@@ -79,6 +79,7 @@ const Map = () => {
           style={styles.map}
           customMapStyle={MapViewStyle}
           region={region}
+          showsUserLocation={true}
         >
           <Marker
             coordinate={{
