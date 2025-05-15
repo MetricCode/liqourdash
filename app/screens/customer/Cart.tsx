@@ -502,7 +502,9 @@ const Cart = () => {
 
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Delivery Fee</Text>
-              <Text style={styles.summaryValue}>ksh {deliveryFee.toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>
+                ksh {deliveryFee.toFixed(2)}
+              </Text>
             </View>
 
             <View style={[styles.summaryRow, styles.totalRow]}>
