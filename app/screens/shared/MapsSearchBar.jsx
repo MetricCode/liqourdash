@@ -83,7 +83,7 @@ const MapsSearchBar = ({
         query={{
           key: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
           language: "en",
-          types: "geocode",
+          // types: "geocode",
           location: `${currentLocation.latitude},${currentLocation.longitude}`,
           radius: 30000,
         }}

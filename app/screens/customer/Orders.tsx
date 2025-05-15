@@ -17,6 +17,7 @@ import { FIREBASE_DB, FIREBASE_AUTH } from '../../../FirebaseConfig';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import useStore from '../../../utils/useStore';
 
 type Order = {
   id: string;
@@ -36,6 +37,9 @@ const Orders = () => {
   const [refreshing, setRefreshing] = useState(false);
   
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+
+  //zustund
+  const setCustomerOrders = useStore((state) => state.setCustomerOrders);
   
   const fetchOrders = useCallback(async () => {
     const currentUser = FIREBASE_AUTH.currentUser;
@@ -59,6 +63,7 @@ const Orders = () => {
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        setCustomerOrders(data);
         ordersList.push({
           id: doc.id,
           status: data.status,
@@ -66,6 +71,7 @@ const Orders = () => {
           total: data.total || 0,
           items: data.items || []
         });
+
       });
       
       setOrders(ordersList);
