@@ -28,10 +28,7 @@ const FindDeliveryPersonel = () => {
   const setMyStoredLocation = useStore((state) => state.setMyStoredLocation);
 
   return (
-    <DeliveryPersonelLayout
-      title="Find Delivery Personel"
-      snapPoints={["40%", "85%"]}
-    >
+    <DeliveryPersonelLayout title="Find Delivery Personel" snapPoints={["85%"]}>
       <View style={{ marginVertical: 10 }}>
         <Text style={{ fontSize: 18, marginBottom: 3 }}>From</Text>
         <MapsSearchBar
