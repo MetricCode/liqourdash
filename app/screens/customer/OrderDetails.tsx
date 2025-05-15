@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_DB, FIREBASE_AUTH } from '../../../FirebaseConfig';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import useStore from '../../../utils/useStore';
 
 type OrderItem = {
   id: string;
@@ -52,6 +53,8 @@ const OrderDetails = () => {
   type OrderDetailsRouteProp = RouteProp<{ params: { orderId: string } }, 'params'>;
   const route = useRoute<OrderDetailsRouteProp>();
   const { orderId } = route.params || {};
+
+
   
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -238,7 +241,9 @@ const OrderDetails = () => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.orderStatusCard}>
+        <TouchableOpacity style={styles.orderStatusCard} onPress={() => {
+          console.log('Order status card pressed');
+        }}>
           <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
             <Ionicons name={statusInfo.icon as keyof typeof Ionicons.glyphMap} size={24} color={statusInfo.text} />
           </View>
@@ -250,7 +255,7 @@ const OrderDetails = () => {
             </Text>
             <Text style={styles.orderDate}>{orderDate}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
         
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Items</Text>

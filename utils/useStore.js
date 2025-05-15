@@ -13,6 +13,8 @@ const useStore = create((set) => ({
   //customer data
   myStoredLocation: null,
   userAddress: null,
+  customerOrders: [],
+  setCustomerOrders: (newOrders) => set({ customerOrders: [newOrders] }),
 
   setMyStoredLocation: (newLocation) =>
     set({ myStoredLocation: newLocation.coords }),
