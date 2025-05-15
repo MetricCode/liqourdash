@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_AUTH, FIREBASE_DB } from '../../../FirebaseConfig';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc,setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import {
   signOut,
   updateProfile,
@@ -47,12 +47,30 @@ const DeliveryProfile = () => {
   const [changingPassword, setChangingPassword] = useState(false);
 
   // User profile state
-  const [userProfile, setUserProfile] = useState({
+  type UserProfile = {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    position: object;
+    isAvailable: boolean;
+    currentOrders: any[]; // You can replace 'any' with a more specific type if you know the structure
+    maxConcurrentOrders: number;
+    joinDate: string;
+    photoURL: string | null;
+  };
+
+  const [userProfile, setUserProfile] = useState<UserProfile>({
     name: user?.displayName || "",
     email: user?.email || "",
     phone: "",
-    joinDate: "N/A",
-    photoURL: null,
+    address: "",
+    position: {},
+    isAvailable: false,         // New field for availability status
+    currentOrders: [],          // New field for tracking active deliveries
+    maxConcurrentOrders: 3,     // New field for order capacity
+    joinDate: "N/A",            // Add joinDate to fix type error
+    photoURL: null              // Add photoURL for consistency
   });
 
   // Availability settings
@@ -76,72 +94,53 @@ const DeliveryProfile = () => {
     }
 
     try {
-      // First check userProfiles collection (shared with customer profile)
       const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
       const profileSnap = await getDoc(profileRef);
+
+      if (!profileSnap.exists()) {
+      // Create new profile document with delivery-specific fields
+      await setDoc(profileRef, {
+        name: user.displayName || "",
+        email: user.email || "",
+        phone: "",
+        address: "",
+        position: {},
+        isAvailable: false,
+        currentOrders: [],
+        maxConcurrentOrders: 3,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        role: "delivery" // Add role identification
+      });
       
-      // Then check the users collection for additional delivery-specific data
-      const userRef = doc(FIREBASE_DB, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-      
-      if (profileSnap.exists() || userSnap.exists()) {
-        // Merge data from both sources
-        const userData = { 
-          ...profileSnap.exists() ? profileSnap.data() : {},
-          ...userSnap.exists() ? userSnap.data() : {}
-        };
-        
-        // Safely format the join date with null checking
-        let joinDate = 'N/A';
-        if (userData.createdAt && typeof userData.createdAt.toDate === 'function') {
-          joinDate = new Date(userData.createdAt.toDate()).toLocaleDateString();
-        } else if (userData.createdAt) {
-          // Handle if createdAt exists but isn't a Firestore timestamp
-          try {
-            joinDate = new Date(userData.createdAt).toLocaleDateString();
-          } catch (e) {
-            console.log('Unable to format date:', e);
-          }
-        }
-        
-        // Update user profile state with safe values
-        setUserProfile({
-          name: user.displayName || userData.name || "",
-          email: user.email || userData.email || "",
-          phone: userData.phone || "",
-          joinDate: joinDate,
-          photoURL: userData.photoURL || null,
-        });
-        
-        // Update availability settings
-        setIsAvailable(userData.isAvailable === true);
-        setMaxConcurrentOrders(userData.maxConcurrentOrders?.toString() || '3');
-        
-        // Update stats
-        if (userData.stats) {
-          setStats(userData.stats);
-        } else {
-          // Set default stats or fetch from delivery history
-          setStats({
-            totalDeliveries: userData.totalDeliveries || 0,
-            totalDistance: userData.totalDistance || 0,
-            avgRating: userData.avgRating || 4.8,
-            completionRate: userData.completionRate || 98
-          });
-        }
+      setUserProfile({
+        name: user.displayName || "",
+        email: user.email || "",
+        phone: "",
+        address: "",
+        position: {},
+        isAvailable: false,
+        currentOrders: [],
+        maxConcurrentOrders: 3,
+        joinDate: "N/A",
+        photoURL: null
+      });
       } else {
-        // If no profile exists, use what we have from user auth
+        const data = profileSnap.data();
         setUserProfile({
-          name: user.displayName || "",
-          email: user.email || "",
-          phone: "",
-          joinDate: "N/A",
-          photoURL: null,
+          name: user.displayName || data.name || "",
+          email: user.email || data.email || "",
+          phone: data.phone || "",
+          address: data.address || "",
+          position: data.position || {},
+          isAvailable: typeof data.isAvailable === "boolean" ? data.isAvailable : false,
+          currentOrders: Array.isArray(data.currentOrders) ? data.currentOrders : [],
+          maxConcurrentOrders: typeof data.maxConcurrentOrders === "number" ? data.maxConcurrentOrders : 3,
+          joinDate: data.createdAt
+            ? new Date(data.createdAt.seconds * 1000).toLocaleDateString()
+            : "N/A",
+          photoURL: data.photoURL || null
         });
-        
-        // Set default values for availability
-        setIsAvailable(false);
-        setMaxConcurrentOrders('3');
       }
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -333,13 +332,15 @@ const DeliveryProfile = () => {
       </View>
 
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
+        style={{ flex: 1 }} // Add this line
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={["#4a6da7"]}
-            tintColor="#4a6da7"
+            tintColor={"#4a6da7"}
             title="Refreshing profile..."
             titleColor="#666"
           />
@@ -576,16 +577,6 @@ const DeliveryProfile = () => {
               <Ionicons name="chevron-forward" size={20} color="#ccc" />
             </View>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={[styles.menuIcon, { backgroundColor: '#e1f5fe' }]}>
-              <Ionicons name="help-circle-outline" size={22} color="#0288d1" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>Help & Support</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -734,7 +725,9 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   content: {
-    flex: 1,
+    flexGrow: 1, // Add this to allow content to expand
+    padding: 20,
+    paddingBottom: 40,
   },
   profileSection: {
     backgroundColor: 'white',
