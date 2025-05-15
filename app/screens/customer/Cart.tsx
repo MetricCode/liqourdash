@@ -73,6 +73,10 @@ const Cart = () => {
       userLocation?.latitude,
       userLocation?.longitude
     )
+
+    //store location for administrator
+    //every product has a location
+    //rate ni set by the administrator
   );
 
   // State declarations
@@ -316,7 +320,13 @@ const Cart = () => {
       0
     );
 
-    const fixedDeliveryFee = 3.5;
+    const fixedDeliveryFee =
+      getDistanceFromLatLonInKm(
+        userLocation?.latitude,
+        userLocation?.longitude,
+        userLocation?.latitude,
+        userLocation?.longitude
+      ) * 100;
 
     return {
       subtotal: calculatedSubtotal,
@@ -492,12 +502,12 @@ const Cart = () => {
 
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Delivery Fee</Text>
-              <Text style={styles.summaryValue}>${deliveryFee.toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>ksh {deliveryFee.toFixed(2)}</Text>
             </View>
 
             <View style={[styles.summaryRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+              <Text style={styles.totalValue}>ksh {total.toFixed(2)}</Text>
             </View>
 
             <TouchableOpacity
