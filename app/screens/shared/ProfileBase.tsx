@@ -3,8 +3,6 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, SafeAreaView, Switch, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_AUTH, FIREBASE_DB  } from '../../../FirebaseConfig';
-import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
 
 const ProfileBase = ({ userType = 'customer' }) => {
   const auth = FIREBASE_AUTH;
