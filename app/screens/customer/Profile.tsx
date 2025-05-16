@@ -5,7 +5,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Image,
   SafeAreaView,
   StatusBar,
@@ -15,10 +14,12 @@ import {
   Modal,
   RefreshControl,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FIREBASE_AUTH, FIREBASE_DB } from "../../../FirebaseConfig";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   signOut,
   updateProfile,
@@ -29,6 +30,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import MapsSearchBar from "../shared/MapsSearchBar";
 import useStore from "../../../utils/useStore";
+
 const CustomerProfile = () => {
   const navigation = useNavigation();
   const auth = FIREBASE_AUTH;
@@ -55,6 +57,13 @@ const CustomerProfile = () => {
     console.log("the user profile", userProfile);
   }, [userProfile]);
 
+  // Log user ID for debugging
+  useEffect(() => {
+    if (user) {
+      console.log("Current authenticated user UID:", user.uid);
+    }
+  }, [user]);
+
   const [editMode, setEditMode] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [passwordModal, setPasswordModal] = useState(false);
@@ -72,10 +81,13 @@ const CustomerProfile = () => {
     }
 
     try {
+      console.log("Fetching profile for user:", user.uid);
+      
       const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
       const profileSnap = await getDoc(profileRef);
 
       if (profileSnap.exists()) {
+        console.log("Profile document exists");
         const data = profileSnap.data();
         setUserProfile({
           name: user.displayName || data.name || "",
@@ -85,6 +97,7 @@ const CustomerProfile = () => {
           position: data.position || {},
         });
       } else {
+        console.log("Profile document does not exist, will create on save");
         // If no profile exists, use what we have from user auth
         setUserProfile({
           name: user.displayName || "",
@@ -127,15 +140,23 @@ const CustomerProfile = () => {
     try {
       setSavingProfile(true);
 
-      // Update Firestore profile
-      const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
-      await updateDoc(profileRef, {
+      // Create profile data object
+      const profileData = {
         name: userProfile.name,
+        email: userProfile.email,
         phone: userProfile.phone,
         address: userProfile.address,
         position: userProfile.position,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      // Update Firestore profile - use setDoc with merge instead of updateDoc
+      const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
+      await setDoc(profileRef, {
+        ...profileData,
+        createdAt: serverTimestamp(),
+        role: "customer",
+      }, { merge: true });
 
       // Update Auth display name if changed
       if (user.displayName !== userProfile.name) {
@@ -233,6 +254,256 @@ const CustomerProfile = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9f9f9" />
+<<<<<<< HEAD
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{flex: 1}}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+      >
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Profile</Text>
+          {!editMode && (
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => setEditMode(true)}
+            >
+              <Ionicons name="create-outline" size={22} color="#4a6da7" />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        <FlatList
+          data={["1"]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.content}
+          style={{ flex: 1 }}
+          nestedScrollEnabled={true}
+          keyboardDismissMode="on-drag"
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#4a6da7"]}
+              tintColor={"#4a6da7"}
+              title="Refreshing profile..."
+              titleColor="#666"
+            />
+          }
+          renderItem={() => (
+            <>
+              <View style={styles.profileSection}>
+                <View style={styles.avatarContainer}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {userProfile.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.userName}>{userProfile.name}</Text>
+                  <Text style={styles.userEmail}>{userProfile.email}</Text>
+                </View>
+
+                <View style={styles.divider} />
+
+                {editMode ? (
+                  <View style={styles.formContainer}>
+                    <View style={styles.formField}>
+                      <Text style={styles.fieldLabel}>Full Name</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={userProfile.name}
+                        onChangeText={(text) =>
+                          setUserProfile({ ...userProfile, name: text })
+                        }
+                        placeholder="Enter your name"
+                      />
+                    </View>
+
+                    <View style={styles.formField}>
+                      <Text style={styles.fieldLabel}>Phone Number</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={userProfile.phone}
+                        onChangeText={(text) =>
+                          setUserProfile({ ...userProfile, phone: text })
+                        }
+                        placeholder="Enter your phone number"
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+
+                    <View style={styles.formField}>
+                      <Text style={styles.fieldLabel}>Delivery Address</Text>
+                      <View style={{ zIndex: 1000 }}>
+                        <MapsSearchBar
+                          stylesPasses={[styles.input, styles.addressInput]}
+                          inputContainerStyle={{}}
+                          placeholderText="Enter your delivery address"
+                          onSelectFunction={(data: { description: string }, details: { geometry: { location: any } }) => {
+                            setUserProfile({
+                              ...userProfile,
+                              address: data.description,
+                              position: details.geometry.location,
+                            });
+                          }}
+                          Icon={Ionicons}
+                          iconName="location-outline"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.buttonRow}>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={() => setEditMode(false)}
+                        disabled={savingProfile}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.saveButton,
+                          savingProfile && styles.disabledButton,
+                        ]}
+                        onPress={handleSaveProfile}
+                        disabled={savingProfile}
+                      >
+                        {savingProfile ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={styles.saveButtonText}>Save Changes</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.infoContainer}>
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIcon}>
+                        <Ionicons name="call-outline" size={20} color="#4a6da7" />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <Text style={styles.infoLabel}>Phone Number</Text>
+                        <Text style={styles.infoValue}>
+                          {userProfile.phone || "Not set"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIcon}>
+                        <Ionicons name="location-outline" size={20} color="#4a6da7" />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <Text style={styles.infoLabel}>Delivery Address</Text>
+                        <Text style={styles.infoValue}>
+                          {userProfile.address || "Not set"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.menuSection}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigation.navigate("Orders" as never)}
+                >
+                  <View style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}>
+                    <Ionicons name="receipt-outline" size={22} color="#1976d2" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>My Orders</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigation.navigate("Cart" as never)}
+                >
+                  <View style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}>
+                    <Ionicons name="cart-outline" size={22} color="#388e3c" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>My Cart</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => setPasswordModal(true)}
+                >
+                  <View style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}>
+                    <Ionicons name="lock-closed-outline" size={22} color="#f57c00" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>Change Password</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    Alert.alert(
+                      "Contact Support",
+                      "Do you need help with your account?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Call Support",
+                          onPress: () =>
+                            Alert.alert(
+                              "Support",
+                              "Customer support: +254-XXX-XXX-XXX"
+                            ),
+                        },
+                        {
+                          text: "Send Email",
+                          onPress: () =>
+                            Alert.alert("Email", "support@liquordash.com"),
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <View style={[styles.menuIcon, { backgroundColor: "#e1f5fe" }]}>
+                    <Ionicons name="help-circle-outline" size={22} color="#0288d1" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>Help & Support</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.logoutButton}
+                onPress={() => {
+                  Alert.alert("Logout", "Are you sure you want to logout?", [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Logout",
+                      style: "destructive",
+                      onPress: handleLogout,
+                    },
+                  ]);
+                }}
+              >
+                <Ionicons name="log-out-outline" size={20} color="#f44336" />
+                <Text style={styles.logoutText}>Logout</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        />
+      </KeyboardAvoidingView>
+=======
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Profile</Text>
@@ -480,6 +751,7 @@ const CustomerProfile = () => {
        )}
      ></FlatList>
 
+>>>>>>> 8929849f623491b23150b8dbb546fe8bcade9e23
 
       {/* Change Password Modal */}
       <Modal
@@ -561,6 +833,7 @@ const CustomerProfile = () => {
     </SafeAreaView>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
