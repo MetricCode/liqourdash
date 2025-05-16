@@ -14,10 +14,7 @@ import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 //zustand
 import useStore from "../../../../utils/useStore";
 
-
-
 const FindDeliveryPersonel = () => {
-
   //navigation
   //navigation
   const navigation = useNavigation();
@@ -29,9 +26,7 @@ const FindDeliveryPersonel = () => {
   //   const setMyStoredLocation = useStore((state) => state.setMyStoredLocation);
   // let locationToDeliverFrom = useStore((state) => state.orderSelected.customerInfo.address);
   const setMyStoredLocation = useStore((state) => state.setMyStoredLocation);
-
-
-
+ 
   return (
     <DeliveryPersonelLayout
       title="Find Delivery Personel"

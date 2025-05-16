@@ -9,10 +9,12 @@ import MapViewStyle from "../../../utils/MapViewStyle.json";
 //zustand
 import useStore from "../../../utils/useStore";
 import MapsSearchBar from "./MapsSearchBar";
+import { getDistanceFromLatLonInKm } from "../../../utils/MapUtilFunctions";
 
 const Map = () => {
-  
   //zustand
+  const deliveryPersons = useStore((state) => state.deliveryPersons);
+  console.log("deliveryPersons", deliveryPersons);
 
   const locationToDeliverFrom = useStore(
     (state) => state.locationToDeliverFrom
@@ -75,6 +77,16 @@ const Map = () => {
     };
   }
 
+  const setDeliveryFees = useStore((state) => state.setDeliveryFees);
+  setDeliveryFees(
+    getDistanceFromLatLonInKm(
+      location.latitude,
+      location.longitude,
+      destinationLocation.lat,
+      destinationLocation.lng
+    ) * 100
+  );
+
   return (
     location.latitude && (
       <View>
@@ -85,35 +97,56 @@ const Map = () => {
           showsUserLocation={true}
         >
           <Marker
+            key="deliverFrom"
             coordinate={{
               latitude: location.latitude,
               longitude: location.longitude,
             }}
           />
+
           {destinationLocation?.lat && (
-            <Marker
-              key="destination"
-              coordinate={{
-                latitude: destinationLocation?.lat,
-                longitude: destinationLocation?.lng,
-              }}
-            >
-              <Image source={require("../../../utils/images/Delivery.png")} style={{width:40,height:40}} />
-            </Marker>
+            <>
+              <Marker
+                key="deliverTO"
+                coordinate={{
+                  latitude: destinationLocation?.lat,
+                  longitude: destinationLocation?.lng,
+                }}
+              />
+              {deliveryPersons?.map((deliveryPerson, index) => (
+                <>
+                  <Marker
+                    key={index}
+                    coordinate={{
+                      latitude: deliveryPerson?.position?.lat,
+                      longitude: deliveryPerson?.position?.lng,
+                    }}
+                  >
+                    <Image
+                      source={require("../../../utils/images/Delivery.png")}
+                      style={{ width: 40, height: 40 }}
+                    />
+                  </Marker>
+                </>
+              ))}
+              <MapViewDirections
+                origin={{
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                }}
+                destination={{
+                  latitude: destinationLocation?.lat,
+                  longitude: destinationLocation?.lng,
+                }}
+                apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}
+                strokeColor="red"
+                strokeWidth={2}
+                onError={(errorMessage) => {
+                  console.log("Error: ", errorMessage);
+                }}
+              />
+            </>
           )}
-          <MapViewDirections
-            origin={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-            }}
-            destination={{
-              latitude: destinationLocation?.lat,
-              longitude: destinationLocation?.lng,
-            }}
-            apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}
-            strokeColor="red"
-            strokeWidth={2}
-          />
         </MapView>
       </View>
     )
