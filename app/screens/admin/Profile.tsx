@@ -1,11 +1,10 @@
-// app/screens/admin/Profile.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  ScrollView, 
+  FlatList,
   SafeAreaView,
   ActivityIndicator,
   Alert,
@@ -27,7 +26,10 @@ import {
   query,
   where,
   orderBy,
-  limit
+  limit,
+  setDoc,
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   updatePassword, 
@@ -36,8 +38,15 @@ import {
   User 
 } from 'firebase/auth';
 import { NavigationProp } from '@react-navigation/native';
+import MapsSearchBar from '../shared/MapsSearchBar';
 
 const { width } = Dimensions.get('window');
+
+// Define section types for FlatList
+type SectionType = {
+  type: 'account' | 'location' | 'analytics' | 'activity' | 'logout' | 'version';
+  data?: any;
+};
 
 const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, route: any }) => {
   const [loading, setLoading] = useState(true);
@@ -58,6 +67,14 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
     timestamp: string;
     details: string;
   }[]>([]);
+  
+  // Store location state
+  const [editStoreLocation, setEditStoreLocation] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [storeLocation, setStoreLocation] = useState({
+    address: '',
+    position: { lat: 0, lng: 0 }
+  });
 
   // Password change modal state
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
@@ -67,6 +84,9 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
   const [passwordError, setPasswordError] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  // Sections for FlatList
+  const [sections, setSections] = useState<SectionType[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -103,10 +123,11 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
           throw new Error("Admin access required");
         }
   
-        // Then fetch stats and recent activity
+        // Then fetch stats, recent activity, and store location
         await Promise.all([
           fetchAdminStats(),
-          fetchRecentActivity()
+          fetchRecentActivity(),
+          fetchStoreLocation()
         ]);
         
         // Animate elements in
@@ -137,6 +158,20 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
     loadData();
   }, [fadeAnim, scaleAnim]);
 
+  // Update sections when data changes
+  useEffect(() => {
+    if (!loading) {
+      setSections([
+        { type: 'account' },
+        { type: 'location' },
+        { type: 'analytics' },
+        { type: 'activity' },
+        { type: 'logout' },
+        { type: 'version' }
+      ]);
+    }
+  }, [loading, statsData, recentActivity, storeLocation]);
+
   // Check if route params contain a target section to scroll to
   useEffect(() => {
     if (route.params?.section === 'password') {
@@ -144,6 +179,57 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
       setPasswordModalVisible(true);
     }
   }, [route.params]);
+
+  // Fetch store location from Firestore
+  const fetchStoreLocation = async () => {
+    try {
+      const user = FIREBASE_AUTH.currentUser;
+      if (!user) throw new Error("User not authenticated");
+      
+      const storeRef = doc(FIREBASE_DB, "storeSettings", "location");
+      const storeSnap = await getDoc(storeRef);
+      
+      if (storeSnap.exists()) {
+        const data = storeSnap.data();
+        setStoreLocation({
+          address: data.address || '',
+          position: data.position || { lat: 0, lng: 0 }
+        });
+      } else {
+        // Only try to create the document if you have write permissions
+        try {
+          await setDoc(storeRef, {
+            address: '',
+            position: { lat: 0, lng: 0 },
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        } catch (writeError) {
+          console.error("Error creating store location document:", writeError);
+          // Just set default values without creating document
+          setStoreLocation({
+            address: '',
+            position: { lat: 0, lng: 0 }
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching store location:", error);
+      // Set default values even if there's an error
+      setStoreLocation({
+        address: '',
+        position: { lat: 0, lng: 0 }
+      });
+      
+      // Don't show alert for permission errors in production
+      if (process.env.NODE_ENV !== 'production') {
+        Alert.alert(
+          "Permissions Error", 
+          "Your account doesn't have permission to access store location. Please contact your administrator."
+        );
+      }
+    }
+  };
 
   const fetchAdminStats = async () => {
     try {
@@ -293,6 +379,63 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
       ]);
     }
   };
+  // Add this new function to update orders
+  const updateOrdersWithStoreLocation = async (location: { address: string, position: { lat: number, lng: number } }) => {
+    try {
+      // Get all active orders (not delivered or cancelled)
+      const ordersRef = collection(FIREBASE_DB, "orders");
+      const q = query(
+        ordersRef,
+        where("status", "not-in", ["delivered", "cancelled"])
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      // Batch update all matching orders
+      const batch = writeBatch(FIREBASE_DB);
+      querySnapshot.forEach((doc) => {
+        const orderRef = doc.ref;
+        batch.update(orderRef, {
+          storeLocation: location,
+          updatedAt: serverTimestamp()
+        });
+      });
+      
+      await batch.commit();
+      console.log(`Updated ${querySnapshot.size} orders with new store location`);
+    } catch (error) {
+      console.error("Error updating orders with store location:", error);
+      // This is non-critical, so we don't show an alert to the user
+    }
+  };
+
+  // Handle save store location
+  const handleSaveStoreLocation = async () => {
+    if (!storeLocation.address || !storeLocation.address.trim()) {
+      Alert.alert("Error", "Please select a valid address from the dropdown");
+      return;
+    }
+
+    try {
+      setSavingLocation(true);
+      const storeRef = doc(FIREBASE_DB, "storeSettings", "location");
+      
+      await setDoc(storeRef, {
+        address: storeLocation.address,
+        position: storeLocation.position,
+        updatedAt: serverTimestamp(),
+        updatedBy: FIREBASE_AUTH.currentUser?.uid || 'unknown'
+      }, { merge: true });
+      
+      setEditStoreLocation(false);
+      Alert.alert("Success", "Store location updated successfully");
+    } catch (error) {
+      console.error("Error saving location:", error);
+      Alert.alert("Error", "Failed to save location");
+    } finally {
+      setSavingLocation(false);
+    }
+  };
 
   const handleLogout = async () => {
     Alert.alert(
@@ -401,6 +544,332 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
     setPasswordSuccess(false);
   };
 
+  // Render different sections based on section type
+  const renderSection = ({ item }: { item: SectionType }) => {
+    switch(item.type) {
+      case 'account':
+        return renderAccountSection();
+      case 'location':
+        return renderLocationSection();
+      case 'analytics':
+        return renderAnalyticsSection();
+      case 'activity':
+        return renderActivitySection();
+      case 'logout':
+        return renderLogoutButton();
+      case 'version':
+        return renderVersionText();
+      default:
+        return null;
+    }
+  };
+
+  // Render Account Section
+  const renderAccountSection = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.sectionContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <Text style={styles.sectionTitle}>Account Information</Text>
+        
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconContainer}>
+              <Ionicons name="person" size={20} color="#4a6da7" />
+            </View>
+            <View style={styles.infoDetails}>
+              <Text style={styles.infoLabel}>Name</Text>
+              <Text style={styles.infoValue}>{adminName}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.divider} />
+          
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconContainer}>
+              <Ionicons name="mail" size={20} color="#4a6da7" />
+            </View>
+            <View style={styles.infoDetails}>
+              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoValue}>{adminEmail}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.divider} />
+          
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconContainer}>
+              <Ionicons name="calendar" size={20} color="#4a6da7" />
+            </View>
+            <View style={styles.infoDetails}>
+              <Text style={styles.infoLabel}>Joined</Text>
+              <Text style={styles.infoValue}>{adminJoinDate || 'Not available'}</Text>
+            </View>
+          </View>
+        </View>
+        
+        <View style={styles.profileActionButtons}>
+          <TouchableOpacity style={styles.editProfileButton}>
+            <Ionicons name="create-outline" size={18} color="#4a6da7" style={styles.buttonIcon} />
+            <Text style={styles.editProfileText}>Edit Profile</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.changePasswordButton}
+            onPress={() => setPasswordModalVisible(true)}
+          >
+            <Ionicons name="lock-closed-outline" size={18} color="#4a6da7" style={styles.buttonIcon} />
+            <Text style={styles.editProfileText}>Change Password</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  // Render Store Location Section
+  const renderLocationSection = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.sectionContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Store Location</Text>
+          {!editStoreLocation && (
+            <TouchableOpacity onPress={() => setEditStoreLocation(true)}>
+              <Text style={styles.editText}>Edit</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        <View style={styles.locationCard}>
+          {editStoreLocation ? (
+            <View>
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Store Address</Text>
+                <View style={{ zIndex: 1000 }}>
+                  <MapsSearchBar
+                    stylesPasses={[styles.locationInput]}
+                    inputContainerStyle={{}}
+                    placeholderText="Enter store address"
+                    onSelectFunction={(data: { description: string }, details: any = null) => {
+                      if (data && data.description) {
+                        const newLocation = {
+                          address: data.description,
+                          position: details?.geometry?.location || storeLocation.position
+                        };
+                        console.log("New location selected:", newLocation); // Debug log
+                        setStoreLocation(newLocation);
+                      }
+                    }}
+                    Icon={Ionicons}
+                    iconName="location"
+                  />
+                </View>
+              </View>
+              
+              {storeLocation.address && (
+                <View style={styles.selectedLocationContainer}>
+                  <Ionicons name="location" size={20} color="#4a6da7" />
+                  <Text style={styles.selectedLocationText}>{storeLocation.address}</Text>
+                </View>
+              )}
+              
+              <View style={styles.locationButtonRow}>
+                <TouchableOpacity
+                  style={styles.cancelLocationButton}
+                  onPress={() => setEditStoreLocation(false)}
+                  disabled={savingLocation}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.saveLocationButton,
+                    savingLocation && styles.disabledButton
+                  ]}
+                  onPress={handleSaveStoreLocation}
+                  disabled={savingLocation}
+                >
+                  {savingLocation ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Location</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.locationDisplay}>
+              <View style={styles.locationIconContainer}>
+                <Ionicons name="location" size={24} color="#4a6da7" />
+              </View>
+              <View style={styles.locationInfo}>
+                <Text style={styles.locationLabel}>Store Address</Text>
+                <Text style={styles.locationAddress}>
+                  {storeLocation.address || 'No store location set'}
+                </Text>
+                {storeLocation.address && (
+                  <TouchableOpacity style={styles.viewMapButton}>
+                    <Text style={styles.viewMapText}>View on Map</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+      </Animated.View>
+    );
+  };
+
+  // Render Analytics Section
+  const renderAnalyticsSection = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.sectionContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <Text style={styles.sectionTitle}>Store Analytics</Text>
+        
+        <View style={styles.statsGrid}>
+          <TouchableOpacity 
+            style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}
+            onPress={() => navigation.navigate('Products')}
+          >
+            <Ionicons name="cube" size={28} color="#1976D2" style={styles.statIcon} />
+            <Text style={styles.statValue}>{statsData.productsAdded}</Text>
+            <Text style={styles.statLabel}>Products</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}
+            onPress={() => navigation.navigate('Orders')}
+          >
+            <Ionicons name="list" size={28} color="#388E3C" style={styles.statIcon} />
+            <Text style={styles.statValue}>{statsData.ordersProcessed}</Text>
+            <Text style={styles.statLabel}>Orders</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.statCard, { backgroundColor: '#F3E5F5' }]}
+            onPress={() => { /* Navigate to users section if available */ }}
+          >
+            <Ionicons name="people" size={28} color="#7B1FA2" style={styles.statIcon} />
+            <Text style={styles.statValue}>{statsData.totalUsers}</Text>
+            <Text style={styles.statLabel}>Users</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}
+            onPress={() => navigation.navigate('Sales')}
+          >
+            <Ionicons name="cash" size={28} color="#E65100" style={styles.statIcon} />
+            <Text style={styles.statValue}>${statsData.totalRevenue.toFixed(0)}</Text>
+            <Text style={styles.statLabel}>Revenue</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  // Render Activity Section
+  const renderActivitySection = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.sectionContainer, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <TouchableOpacity>
+            <Text style={styles.seeAllText}>See All</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {recentActivity.map((activity, index) => (
+          <TouchableOpacity 
+            key={index}
+            style={styles.activityCard}
+            onPress={() => {
+              if (activity.type === 'order') handleNavigate('Orders');
+              if (activity.type === 'product') handleNavigate('Products');
+            }}
+          >
+            <View style={[
+              styles.activityIconContainer, 
+              activity.type === 'order' 
+                ? { backgroundColor: '#E3F2FD' } 
+                : { backgroundColor: '#FFF3E0' }
+            ]}>
+              <Ionicons 
+                name={activity.type === 'order' ? 'receipt' : 'cube'} 
+                size={20} 
+                color={activity.type === 'order' ? '#1976D2' : '#E65100'} 
+              />
+            </View>
+            
+            <View style={styles.activityContent}>
+              <Text style={styles.activityTitle}>{activity.title}</Text>
+              <Text style={styles.activityDetails}>{activity.details}</Text>
+            </View>
+            
+            <View style={styles.activityTime}>
+              <Text style={styles.activityTimeText}>{activity.timestamp}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#999" />
+            </View>
+          </TouchableOpacity>
+        ))}
+      </Animated.View>
+    );
+  };
+
+  // Render Logout Button
+  const renderLogoutButton = () => {
+    return (
+      <TouchableOpacity 
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Ionicons name="log-out" size={20} color="white" />
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  // Render Version Text
+  const renderVersionText = () => {
+    return (
+      <Text style={styles.versionText}>LiquorDash Admin v1.0.0</Text>
+    );
+  };
+
+  // Render item separator
+  const renderItemSeparator = () => {
+    return <View style={{ height: 0 }} />;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -446,184 +915,15 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
         </View>
       </View>
 
-      <ScrollView 
-        contentContainerStyle={styles.content} 
+      {/* Main content as FlatList instead of ScrollView */}
+      <FlatList
+        data={sections}
+        renderItem={renderSection}
+        keyExtractor={(item, index) => `${item.type}-${index}`}
+        ItemSeparatorComponent={renderItemSeparator}
         showsVerticalScrollIndicator={false}
-      >
-        <Animated.View 
-          style={[
-            styles.sectionContainer, 
-            { 
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.sectionTitle}>Account Information</Text>
-          
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoIconContainer}>
-                <Ionicons name="person" size={20} color="#4a6da7" />
-              </View>
-              <View style={styles.infoDetails}>
-                <Text style={styles.infoLabel}>Name</Text>
-                <Text style={styles.infoValue}>{adminName}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.divider} />
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoIconContainer}>
-                <Ionicons name="mail" size={20} color="#4a6da7" />
-              </View>
-              <View style={styles.infoDetails}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{adminEmail}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.divider} />
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoIconContainer}>
-                <Ionicons name="calendar" size={20} color="#4a6da7" />
-              </View>
-              <View style={styles.infoDetails}>
-                <Text style={styles.infoLabel}>Joined</Text>
-                <Text style={styles.infoValue}>{adminJoinDate || 'Not available'}</Text>
-              </View>
-            </View>
-          </View>
-          
-          <View style={styles.profileActionButtons}>
-            <TouchableOpacity style={styles.editProfileButton}>
-              <Ionicons name="create-outline" size={18} color="#4a6da7" style={styles.buttonIcon} />
-              <Text style={styles.editProfileText}>Edit Profile</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.changePasswordButton}
-              onPress={() => setPasswordModalVisible(true)}
-            >
-              <Ionicons name="lock-closed-outline" size={18} color="#4a6da7" style={styles.buttonIcon} />
-              <Text style={styles.editProfileText}>Change Password</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-        
-        <Animated.View 
-          style={[
-            styles.sectionContainer, 
-            { 
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.sectionTitle}>Store Analytics</Text>
-          
-          <View style={styles.statsGrid}>
-            <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}
-              onPress={() => navigation.navigate('Products')}
-            >
-              <Ionicons name="cube" size={28} color="#1976D2" style={styles.statIcon} />
-              <Text style={styles.statValue}>{statsData.productsAdded}</Text>
-              <Text style={styles.statLabel}>Products</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}
-              onPress={() => navigation.navigate('Orders')}
-            >
-              <Ionicons name="list" size={28} color="#388E3C" style={styles.statIcon} />
-              <Text style={styles.statValue}>{statsData.ordersProcessed}</Text>
-              <Text style={styles.statLabel}>Orders</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#F3E5F5' }]}
-              onPress={() => { /* Navigate to users section if available */ }}
-            >
-              <Ionicons name="people" size={28} color="#7B1FA2" style={styles.statIcon} />
-              <Text style={styles.statValue}>{statsData.totalUsers}</Text>
-              <Text style={styles.statLabel}>Users</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}
-              onPress={() => navigation.navigate('Sales')}
-            >
-              <Ionicons name="cash" size={28} color="#E65100" style={styles.statIcon} />
-              <Text style={styles.statValue}>${statsData.totalRevenue.toFixed(0)}</Text>
-              <Text style={styles.statLabel}>Revenue</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-        
-        <Animated.View 
-          style={[
-            styles.sectionContainer, 
-            { 
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }]
-            }
-          ]}
-        >
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {recentActivity.map((activity, index) => (
-            <TouchableOpacity 
-              key={index}
-              style={styles.activityCard}
-              onPress={() => {
-                if (activity.type === 'order') handleNavigate('Orders');
-                if (activity.type === 'product') handleNavigate('Products');
-              }}
-            >
-              <View style={[
-                styles.activityIconContainer, 
-                activity.type === 'order' 
-                  ? { backgroundColor: '#E3F2FD' } 
-                  : { backgroundColor: '#FFF3E0' }
-              ]}>
-                <Ionicons 
-                  name={activity.type === 'order' ? 'receipt' : 'cube'} 
-                  size={20} 
-                  color={activity.type === 'order' ? '#1976D2' : '#E65100'} 
-                />
-              </View>
-              
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>{activity.title}</Text>
-                <Text style={styles.activityDetails}>{activity.details}</Text>
-              </View>
-              
-              <View style={styles.activityTime}>
-                <Text style={styles.activityTimeText}>{activity.timestamp}</Text>
-                <Ionicons name="chevron-forward" size={16} color="#999" />
-              </View>
-            </TouchableOpacity>
-          ))}
-        </Animated.View>
-        
-        <TouchableOpacity 
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-          <Ionicons name="log-out" size={20} color="white" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-        
-        <Text style={styles.versionText}>LiquorDash Admin v1.0.0</Text>
-      </ScrollView>
+        contentContainerStyle={styles.content}
+      />
 
       {/* Password Change Modal */}
       <Modal
@@ -720,6 +1020,7 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
     </SafeAreaView>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -859,6 +1160,10 @@ const styles = StyleSheet.create({
     color: '#4a6da7',
     fontWeight: '600',
   },
+  editText: {
+    color: '#4a6da7',
+    fontWeight: '600',
+  },
   infoCard: {
     backgroundColor: 'white',
     borderRadius: 15,
@@ -975,6 +1280,111 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     fontWeight: '500',
+  },
+  locationCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  locationDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(74, 109, 167, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationLabel: {
+    fontSize: 14,
+    color: '#999',
+    marginBottom: 5,
+  },
+  locationAddress: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 8,
+  },
+  viewMapButton: {
+    alignSelf: 'flex-start',
+  },
+  viewMapText: {
+    color: '#4a6da7',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  formField: {
+    marginBottom: 15,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  locationInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    color: '#333',
+  },
+  selectedLocationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(74, 109, 167, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  selectedLocationText: {
+    flex: 1,
+    marginLeft: 10,
+    color: '#333',
+    fontSize: 14,
+  },
+  locationButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  cancelLocationButton: {
+    flex: 0.48,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  saveLocationButton: {
+    flex: 0.48,
+    backgroundColor: '#4a6da7',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   activityCard: {
     flexDirection: 'row',
