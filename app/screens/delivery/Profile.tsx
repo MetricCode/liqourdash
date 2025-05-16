@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,22 +13,28 @@ import {
   ActivityIndicator,
   StatusBar,
   RefreshControl,
-  Modal
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { FIREBASE_AUTH, FIREBASE_DB } from '../../../FirebaseConfig';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+  Modal,
+  FlatList,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { FIREBASE_AUTH, FIREBASE_DB } from "../../../FirebaseConfig";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import {
   signOut,
   updateProfile,
   EmailAuthProvider,
   reauthenticateWithCredential,
   updatePassword,
-} from 'firebase/auth';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+} from "firebase/auth";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import MapsSearchBar from "../shared/MapsSearchBar";
-import { KeyboardAvoidingView, Platform } from 'react-native';
-
+import { KeyboardAvoidingView, Platform } from "react-native";
 
 const DeliveryProfile = () => {
   const navigation = useNavigation();
@@ -41,29 +47,13 @@ const DeliveryProfile = () => {
   const [editMode, setEditMode] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
-  
+
   // Password change state
   const [passwordModal, setPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
-  
-  // Custom component to handle wrapping MapsSearchBar
-  const LocationSearchBar = ({ onSelect, placeholder }: { onSelect: (data: any, details: any) => void, placeholder: string }) => {
-    return (
-      <View>
-        <MapsSearchBar
-          stylesPasses={[styles.input, styles.addressInput]}
-          inputContainerStyle={styles.input}
-          placeholderText={placeholder}
-          onSelectFunction={onSelect}
-          Icon={Ionicons}
-          iconName="location-outline"
-        />
-      </View>
-    );
-  };
 
   // User profile state
   type UserProfile = {
@@ -86,24 +76,24 @@ const DeliveryProfile = () => {
     phone: "",
     address: "",
     position: {},
-    isAvailable: false,         // New field for availability status
-    currentOrders: [],          // New field for tracking active deliveries
-    maxConcurrentOrders: 3,     // New field for order capacity
-    joinDate: "N/A",            // Add joinDate to fix type error
+    isAvailable: false, // New field for availability status
+    currentOrders: [], // New field for tracking active deliveries
+    maxConcurrentOrders: 3, // New field for order capacity
+    joinDate: "N/A", // Add joinDate to fix type error
     photoURL: null,
-    currentLocation: ""
+    currentLocation: "",
   });
 
   // Availability settings - Fix: sync with userProfile
   const [isAvailable, setIsAvailable] = useState(false);
-  const [maxConcurrentOrders, setMaxConcurrentOrders] = useState('3');
-  
+  const [maxConcurrentOrders, setMaxConcurrentOrders] = useState("3");
+
   // Performance stats
   const [stats, setStats] = useState({
     totalDeliveries: 0,
     totalDistance: 0,
     avgRating: 4.8,
-    completionRate: 98
+    completionRate: 98,
   });
 
   // Fetch user profile data
@@ -130,9 +120,9 @@ const DeliveryProfile = () => {
           maxConcurrentOrders: 3,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-          role: "delivery"
+          role: "delivery",
         });
-        
+
         setUserProfile({
           name: user.displayName || "",
           email: user.email || "",
@@ -144,17 +134,21 @@ const DeliveryProfile = () => {
           maxConcurrentOrders: 3,
           joinDate: "N/A",
           photoURL: null,
-          currentLocation: ""
+          currentLocation: "",
         });
-        
+
         // Sync availability settings
         setIsAvailable(false);
-        setMaxConcurrentOrders('3');
+        setMaxConcurrentOrders("3");
       } else {
         const data = profileSnap.data();
-        const isUserAvailable = typeof data.isAvailable === "boolean" ? data.isAvailable : false;
-        const userMaxOrders = typeof data.maxConcurrentOrders === "number" ? data.maxConcurrentOrders : 3;
-        
+        const isUserAvailable =
+          typeof data.isAvailable === "boolean" ? data.isAvailable : false;
+        const userMaxOrders =
+          typeof data.maxConcurrentOrders === "number"
+            ? data.maxConcurrentOrders
+            : 3;
+
         setUserProfile({
           name: user.displayName || data.name || "",
           email: user.email || data.email || "",
@@ -162,15 +156,17 @@ const DeliveryProfile = () => {
           address: data.address || "",
           position: data.position || {},
           isAvailable: isUserAvailable,
-          currentOrders: Array.isArray(data.currentOrders) ? data.currentOrders : [],
+          currentOrders: Array.isArray(data.currentOrders)
+            ? data.currentOrders
+            : [],
           maxConcurrentOrders: userMaxOrders,
           joinDate: data.createdAt
             ? new Date(data.createdAt.seconds * 1000).toLocaleDateString()
             : "N/A",
           photoURL: data.photoURL || null,
-          currentLocation: data.address || ""
+          currentLocation: data.address || "",
         });
-        
+
         // Sync availability settings - Fix: sync with userProfile
         setIsAvailable(isUserAvailable);
         setMaxConcurrentOrders(userMaxOrders.toString());
@@ -237,18 +233,21 @@ const DeliveryProfile = () => {
   // Handle saving availability settings
   const handleSaveSettings = async () => {
     if (!user) return;
-    
+
     try {
       setSavingSettings(true);
 
       // Validate that location is provided if available
       if (isAvailable && !userProfile.address?.trim()) {
-        Alert.alert("Error", "Please enter your current location when setting yourself as available");
+        Alert.alert(
+          "Error",
+          "Please enter your current location when setting yourself as available"
+        );
         return;
       }
 
       const maxOrders = parseInt(maxConcurrentOrders, 10) || 3;
-      
+
       const updateData = {
         isAvailable: isAvailable,
         maxConcurrentOrders: maxOrders,
@@ -258,23 +257,23 @@ const DeliveryProfile = () => {
       };
 
       // Update both collections
-      const userRef = doc(FIREBASE_DB, 'users', user.uid);
+      const userRef = doc(FIREBASE_DB, "users", user.uid);
       await updateDoc(userRef, updateData);
-      
+
       const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
       await updateDoc(profileRef, updateData);
-      
+
       // Fix: Update local state to match what was saved to Firebase
-      setUserProfile(prev => ({
+      setUserProfile((prev) => ({
         ...prev,
         isAvailable: isAvailable,
-        maxConcurrentOrders: maxOrders
+        maxConcurrentOrders: maxOrders,
       }));
 
-      Alert.alert('Success', 'Your availability settings have been updated');
+      Alert.alert("Success", "Your availability settings have been updated");
     } catch (error) {
-      console.error('Error saving settings:', error);
-      Alert.alert('Error', 'Failed to save settings');
+      console.error("Error saving settings:", error);
+      Alert.alert("Error", "Failed to save settings");
     } finally {
       setSavingSettings(false);
     }
@@ -361,9 +360,9 @@ const DeliveryProfile = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9f9f9" />
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{flex: 1}}
+        style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
       >
         <View style={styles.header}>
@@ -380,339 +379,451 @@ const DeliveryProfile = () => {
           ) : null}
         </View>
 
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
-        style={{ flex: 1 }}
-        nestedScrollEnabled={true}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#4a6da7"]}
-            tintColor={"#4a6da7"}
-            title="Refreshing profile..."
-            titleColor="#666"
-          />
-        }
-      >
-        {/* Profile Section */}
-        <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            {userProfile.photoURL ? (
-              <Image source={{ uri: userProfile.photoURL }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {userProfile.name.charAt(0).toUpperCase()}
-                </Text>
+     
+        <FlatList
+          data={["1"]}
+          // Placeholder for any additional content
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.content}
+          style={{ flex: 1 }}
+          nestedScrollEnabled={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#4a6da7"]}
+              tintColor={"#4a6da7"}
+              title="Refreshing profile..."
+              titleColor="#666"
+            />
+          }
+          renderItem={() => (
+            <>
+              {/* Profile Section */}
+              <View style={styles.profileSection}>
+                <View style={styles.avatarContainer}>
+                  {userProfile.photoURL ? (
+                    <Image
+                      source={{ uri: userProfile.photoURL }}
+                      style={styles.avatar}
+                    />
+                  ) : (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>
+                        {userProfile.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.userName}>{userProfile.name}</Text>
+                  <Text style={styles.userEmail}>{userProfile.email}</Text>
+                </View>
+
+                <View style={styles.divider} />
+
+                {editMode ? (
+                  <View style={styles.formContainer}>
+                    <View style={styles.formField}>
+                      <Text style={styles.fieldLabel}>Full Name</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={userProfile.name}
+                        onChangeText={(text) =>
+                          setUserProfile({ ...userProfile, name: text })
+                        }
+                        placeholder="Enter your name"
+                      />
+                    </View>
+
+                    <View style={styles.formField}>
+                      <Text style={styles.fieldLabel}>Phone Number</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={userProfile.phone}
+                        onChangeText={(text) =>
+                          setUserProfile({ ...userProfile, phone: text })
+                        }
+                        placeholder="Enter your phone number"
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+
+                    {/* Fix: Add location field in edit mode */}
+                    <View style={styles.formField}>
+                      <Text style={styles.fieldLabel}>Current Location</Text>
+
+                      <MapsSearchBar
+                        stylesPasses={[styles.input, styles.addressInput]}
+                        placeholderText={false}
+                        onSelectFunction={(data, details) => {
+                          setUserProfile({
+                            ...userProfile,
+                            address: data.description,
+                            position: details.geometry.location,
+                          });
+                        }}
+                      />
+                    </View>
+
+                    <View style={styles.buttonRow}>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={() => setEditMode(false)}
+                        disabled={savingProfile}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.saveButton,
+                          savingProfile && styles.disabledButton,
+                        ]}
+                        onPress={handleSaveProfile}
+                        disabled={savingProfile}
+                      >
+                        {savingProfile ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={styles.saveButtonText}>
+                            Save Changes
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.infoContainer}>
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIcon}>
+                        <Ionicons
+                          name="call-outline"
+                          size={20}
+                          color="#4a6da7"
+                        />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <Text style={styles.infoLabel}>Phone Number</Text>
+                        <Text style={styles.infoValue}>
+                          {userProfile.phone || "Not set"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIcon}>
+                        <Ionicons
+                          name="location-outline"
+                          size={20}
+                          color="#4a6da7"
+                        />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <Text style={styles.infoLabel}>Current Location</Text>
+                        <Text style={styles.infoValue}>
+                          {userProfile.address || "Not set"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIcon}>
+                        <Ionicons
+                          name="calendar-outline"
+                          size={20}
+                          color="#4a6da7"
+                        />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <Text style={styles.infoLabel}>Member Since</Text>
+                        <Text style={styles.infoValue}>
+                          {userProfile.joinDate}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIcon}>
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={20}
+                          color="#4a6da7"
+                        />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <Text style={styles.infoLabel}>
+                          Availability Status
+                        </Text>
+                        <Text style={styles.infoValue}>
+                          {userProfile.isAvailable
+                            ? "Available"
+                            : "Not Available"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoIcon}>
+                        <Ionicons
+                          name="bicycle-outline"
+                          size={20}
+                          color="#4a6da7"
+                        />
+                      </View>
+                      <View style={styles.infoContent}>
+                        <Text style={styles.infoLabel}>Order Capacity</Text>
+                        <Text style={styles.infoValue}>
+                          {userProfile.maxConcurrentOrders} concurrent orders
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
               </View>
-            )}
-            <Text style={styles.userName}>{userProfile.name}</Text>
-            <Text style={styles.userEmail}>{userProfile.email}</Text>
-          </View>
 
-          <View style={styles.divider} />
+              {/* Performance Stats Section */}
+              <View style={styles.statsSection}>
+                <Text style={styles.sectionTitle}>Performance Stats</Text>
+                <View style={styles.statsGrid}>
+                  <View
+                    style={[styles.statCard, { backgroundColor: "#e8f5e9" }]}
+                  >
+                    <Text style={styles.statValue}>
+                      {stats.totalDeliveries}
+                    </Text>
+                    <Text style={styles.statLabel}>Deliveries</Text>
+                    <Ionicons
+                      name="bicycle-outline"
+                      size={24}
+                      color="#388e3c"
+                      style={styles.statIcon}
+                    />
+                  </View>
 
-          {editMode ? (
-            <View style={styles.formContainer}>
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Full Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={userProfile.name}
-                  onChangeText={(text) =>
-                    setUserProfile({ ...userProfile, name: text })
-                  }
-                  placeholder="Enter your name"
-                />
+                  <View
+                    style={[styles.statCard, { backgroundColor: "#e3f2fd" }]}
+                  >
+                    <Text style={styles.statValue}>
+                      {stats.totalDistance} mi
+                    </Text>
+                    <Text style={styles.statLabel}>Distance</Text>
+                    <Ionicons
+                      name="speedometer-outline"
+                      size={24}
+                      color="#1976d2"
+                      style={styles.statIcon}
+                    />
+                  </View>
+
+                  <View
+                    style={[styles.statCard, { backgroundColor: "#fff3e0" }]}
+                  >
+                    <Text style={styles.statValue}>{stats.avgRating}★</Text>
+                    <Text style={styles.statLabel}>Rating</Text>
+                    <Ionicons
+                      name="star-outline"
+                      size={24}
+                      color="#f57c00"
+                      style={styles.statIcon}
+                    />
+                  </View>
+
+                  <View
+                    style={[styles.statCard, { backgroundColor: "#f3e5f5" }]}
+                  >
+                    <Text style={styles.statValue}>
+                      {stats.completionRate}%
+                    </Text>
+                    <Text style={styles.statLabel}>Completion</Text>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={24}
+                      color="#9c27b0"
+                      style={styles.statIcon}
+                    />
+                  </View>
+                </View>
               </View>
 
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Phone Number</Text>
-                <TextInput
-                  style={styles.input}
-                  value={userProfile.phone}
-                  onChangeText={(text) =>
-                    setUserProfile({ ...userProfile, phone: text })
-                  }
-                  placeholder="Enter your phone number"
-                  keyboardType="phone-pad"
-                />
-              </View>
+              {/* Availability Settings Section */}
+              <View style={styles.settingsSection}>
+                <Text style={styles.sectionTitle}>Availability Settings</Text>
 
-              {/* Fix: Add location field in edit mode */}
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Current Location</Text>
-                <LocationSearchBar 
-                  placeholder="Enter your current location"
-                  onSelect={(data: any, details: any) => {
-                    setUserProfile({
-                      ...userProfile,
-                      address: data.description,
-                      position: details.geometry.location,
-                    });
-                  }}
-                />
-              </View>
+                <View style={styles.settingRow}>
+                  <View style={styles.settingLabelContainer}>
+                    <Ionicons
+                      name="person-outline"
+                      size={20}
+                      color="#4a6da7"
+                      style={styles.settingIcon}
+                    />
+                    <Text style={styles.settingLabel}>
+                      Available for Deliveries
+                    </Text>
+                  </View>
+                  <Switch
+                    value={isAvailable}
+                    onValueChange={setIsAvailable}
+                    trackColor={{ false: "#d1d1d1", true: "#b3d2ea" }}
+                    thumbColor={isAvailable ? "#4a6da7" : "#f4f3f4"}
+                    ios_backgroundColor="#d1d1d1"
+                  />
+                </View>
 
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setEditMode(false)}
-                  disabled={savingProfile}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
+                {/* Location input field */}
+                {isAvailable && (
+                  <View style={styles.formField}>
+                    <Text style={styles.fieldLabel}>Current Location</Text>
+                    <MapsSearchBar
+                      stylesPasses={[styles.input, styles.addressInput]}
+                      placeholderText={false}
+                      onSelectFunction={(data, details) => {
+                        setUserProfile({
+                          ...userProfile,
+                          address: data.description,
+                          position: details.geometry.location,
+                        });
+                      }}
+                    />
+                  </View>
+                )}
+
+                <View style={styles.settingRow}>
+                  <View style={styles.settingLabelContainer}>
+                    <Ionicons
+                      name="layers-outline"
+                      size={20}
+                      color="#4a6da7"
+                      style={styles.settingIcon}
+                    />
+                    <Text style={styles.settingLabel}>
+                      Max Concurrent Orders
+                    </Text>
+                  </View>
+                  <View style={styles.orderCountContainer}>
+                    <TouchableOpacity
+                      style={styles.orderCountButton}
+                      onPress={() => {
+                        const currentValue =
+                          parseInt(maxConcurrentOrders, 10) || 1;
+                        if (currentValue > 1) {
+                          setMaxConcurrentOrders((currentValue - 1).toString());
+                        }
+                      }}
+                    >
+                      <Ionicons name="remove" size={18} color="#4a6da7" />
+                    </TouchableOpacity>
+
+                    <TextInput
+                      style={styles.orderCountInput}
+                      value={maxConcurrentOrders}
+                      onChangeText={(text) => {
+                        const numericValue = text.replace(/[^0-9]/g, "");
+                        setMaxConcurrentOrders(numericValue);
+                      }}
+                      keyboardType="numeric"
+                      maxLength={2}
+                    />
+
+                    <TouchableOpacity
+                      style={styles.orderCountButton}
+                      onPress={() => {
+                        const currentValue =
+                          parseInt(maxConcurrentOrders, 10) || 0;
+                        setMaxConcurrentOrders((currentValue + 1).toString());
+                      }}
+                    >
+                      <Ionicons name="add" size={18} color="#4a6da7" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
                 <TouchableOpacity
                   style={[
                     styles.saveButton,
-                    savingProfile && styles.disabledButton,
+                    savingSettings && styles.disabledButton,
                   ]}
-                  onPress={handleSaveProfile}
-                  disabled={savingProfile}
+                  onPress={handleSaveSettings}
+                  disabled={savingSettings}
                 >
-                  {savingProfile ? (
+                  {savingSettings ? (
                     <ActivityIndicator size="small" color="white" />
                   ) : (
-                    <Text style={styles.saveButtonText}>Save Changes</Text>
+                    <Text style={styles.saveButtonText}>Save Settings</Text>
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-          ) : (
-            <View style={styles.infoContainer}>
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="call-outline" size={20} color="#4a6da7" />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Phone Number</Text>
-                  <Text style={styles.infoValue}>
-                    {userProfile.phone || "Not set"}
-                  </Text>
-                </View>
+
+              {/* Account Actions */}
+              <View style={styles.menuSection}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigation.navigate("Routes" as never)}
+                >
+                  <View
+                    style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}
+                  >
+                    <Ionicons name="map-outline" size={22} color="#1976d2" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>My Routes</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigation.navigate("History" as never)}
+                >
+                  <View
+                    style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}
+                  >
+                    <Ionicons name="time-outline" size={22} color="#388e3c" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>Delivery History</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => setPasswordModal(true)}
+                >
+                  <View
+                    style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}
+                  >
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={22}
+                      color="#f57c00"
+                    />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>Change Password</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="location-outline" size={20} color="#4a6da7" />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Current Location</Text>
-                  <Text style={styles.infoValue}>
-                    {userProfile.address || "Not set"}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="calendar-outline" size={20} color="#4a6da7" />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Member Since</Text>
-                  <Text style={styles.infoValue}>{userProfile.joinDate}</Text>
-                </View>
-              </View>
-
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color="#4a6da7" />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Availability Status</Text>
-                  <Text style={styles.infoValue}>
-                    {userProfile.isAvailable ? "Available" : "Not Available"}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="bicycle-outline" size={20} color="#4a6da7" />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Order Capacity</Text>
-                  <Text style={styles.infoValue}>
-                    {userProfile.maxConcurrentOrders} concurrent orders
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Performance Stats Section */}
-        <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Performance Stats</Text>
-          <View style={styles.statsGrid}>
-            <View style={[styles.statCard, { backgroundColor: '#e8f5e9' }]}>
-              <Text style={styles.statValue}>{stats.totalDeliveries}</Text>
-              <Text style={styles.statLabel}>Deliveries</Text>
-              <Ionicons name="bicycle-outline" size={24} color="#388e3c" style={styles.statIcon} />
-            </View>
-            
-            <View style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}>
-              <Text style={styles.statValue}>{stats.totalDistance} mi</Text>
-              <Text style={styles.statLabel}>Distance</Text>
-              <Ionicons name="speedometer-outline" size={24} color="#1976d2" style={styles.statIcon} />
-            </View>
-            
-            <View style={[styles.statCard, { backgroundColor: '#fff3e0' }]}>
-              <Text style={styles.statValue}>{stats.avgRating}★</Text>
-              <Text style={styles.statLabel}>Rating</Text>
-              <Ionicons name="star-outline" size={24} color="#f57c00" style={styles.statIcon} />
-            </View>
-            
-            <View style={[styles.statCard, { backgroundColor: '#f3e5f5' }]}>
-              <Text style={styles.statValue}>{stats.completionRate}%</Text>
-              <Text style={styles.statLabel}>Completion</Text>
-              <Ionicons name="checkmark-circle-outline" size={24} color="#9c27b0" style={styles.statIcon} />
-            </View>
-          </View>
-        </View>
-
-        {/* Availability Settings Section */}
-        <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Availability Settings</Text>
-          
-          <View style={styles.settingRow}>
-            <View style={styles.settingLabelContainer}>
-              <Ionicons name="person-outline" size={20} color="#4a6da7" style={styles.settingIcon} />
-              <Text style={styles.settingLabel}>Available for Deliveries</Text>
-            </View>
-            <Switch
-              value={isAvailable}
-              onValueChange={setIsAvailable}
-              trackColor={{ false: '#d1d1d1', true: '#b3d2ea' }}
-              thumbColor={isAvailable ? '#4a6da7' : '#f4f3f4'}
-              ios_backgroundColor="#d1d1d1"
-            />
-          </View>
-
-          {/* Location input field */}
-          {isAvailable && (
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Current Location</Text>
-              <LocationSearchBar 
-                placeholder="Enter your current location"
-                onSelect={(data: any, details: any) => {
-                  setUserProfile({
-                    ...userProfile,
-                    address: data.description,
-                    position: details.geometry.location,
-                  });
-                }}
-              />
-            </View>
-          )}
-          
-          <View style={styles.settingRow}>
-            <View style={styles.settingLabelContainer}>
-              <Ionicons name="layers-outline" size={20} color="#4a6da7" style={styles.settingIcon} />
-              <Text style={styles.settingLabel}>Max Concurrent Orders</Text>
-            </View>
-            <View style={styles.orderCountContainer}>
-              <TouchableOpacity 
-                style={styles.orderCountButton}
+              <TouchableOpacity
+                style={styles.logoutButton}
                 onPress={() => {
-                  const currentValue = parseInt(maxConcurrentOrders, 10) || 1;
-                  if (currentValue > 1) {
-                    setMaxConcurrentOrders((currentValue - 1).toString());
-                  }
+                  Alert.alert("Logout", "Are you sure you want to logout?", [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Logout",
+                      style: "destructive",
+                      onPress: handleLogout,
+                    },
+                  ]);
                 }}
               >
-                <Ionicons name="remove" size={18} color="#4a6da7" />
+                <Ionicons name="log-out-outline" size={20} color="#f44336" />
+                <Text style={styles.logoutText}>Logout</Text>
               </TouchableOpacity>
-              
-              <TextInput
-                style={styles.orderCountInput}
-                value={maxConcurrentOrders}
-                onChangeText={text => {
-                  const numericValue = text.replace(/[^0-9]/g, '');
-                  setMaxConcurrentOrders(numericValue);
-                }}
-                keyboardType="numeric"
-                maxLength={2}
-              />
-              
-              <TouchableOpacity 
-                style={styles.orderCountButton}
-                onPress={() => {
-                  const currentValue = parseInt(maxConcurrentOrders, 10) || 0;
-                  setMaxConcurrentOrders((currentValue + 1).toString());
-                }}
-              >
-                <Ionicons name="add" size={18} color="#4a6da7" />
-              </TouchableOpacity>
-            </View>
-          </View>
-          
-          <TouchableOpacity 
-            style={[styles.saveButton, savingSettings && styles.disabledButton]}
-            onPress={handleSaveSettings}
-            disabled={savingSettings}
-          >
-            {savingSettings ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text style={styles.saveButtonText}>Save Settings</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-          
-        {/* Account Actions */}
-        <View style={styles.menuSection}>
-          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Routes' as never)}>
-            <View style={[styles.menuIcon, { backgroundColor: '#e3f2fd' }]}>
-              <Ionicons name="map-outline" size={22} color="#1976d2" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>My Routes</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('History' as never)}>
-            <View style={[styles.menuIcon, { backgroundColor: '#e8f5e9' }]}>
-              <Ionicons name="time-outline" size={22} color="#388e3c" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>Delivery History</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={() => setPasswordModal(true)}>
-            <View style={[styles.menuIcon, { backgroundColor: '#fff3e0' }]}>
-              <Ionicons name="lock-closed-outline" size={22} color="#f57c00" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>Change Password</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={() => {
-            Alert.alert("Logout", "Are you sure you want to logout?", [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Logout",
-                style: "destructive",
-                onPress: handleLogout,
-              },
-            ]);
-          }}
-        >
-          <Ionicons name="log-out-outline" size={20} color="#f44336" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </ScrollView>
+            </>
+          )}
+        ></FlatList>
       </KeyboardAvoidingView>
 
       {/* Change Password Modal */}
@@ -799,46 +910,46 @@ const DeliveryProfile = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: "#f8f9fa",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#666',
+    color: "#666",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between', // Fix: Changed from center to space-between
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between", // Fix: Changed from center to space-between
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e3f2fd',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e3f2fd",
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 14,
   },
   editButtonText: {
-    color: '#4a6da7',
+    color: "#4a6da7",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginLeft: 6,
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   content: {
     flexGrow: 1,
@@ -846,60 +957,60 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   profileSection: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 20,
     marginBottom: 16,
     borderRadius: 12, // Fix: Added border radius for consistent look
-    shadowColor: '#000', // Fix: Added shadow for depth
+    shadowColor: "#000", // Fix: Added shadow for depth
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
   profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   avatarContainer: {
     marginRight: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 10,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#4a6da7',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#4a6da7",
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatarText: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   userName: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginTop: 8,
   },
   userEmail: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginBottom: 8,
   },
   divider: {
     height: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: "#f0f0f0",
     marginVertical: 16,
   },
   infoContainer: {
     marginTop: 8,
   },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
   },
   infoIcon: {
@@ -910,12 +1021,12 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    color: '#888',
+    color: "#888",
   },
   infoValue: {
     fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
+    color: "#333",
+    fontWeight: "500",
   },
   formContainer: {
     marginTop: 8,
@@ -925,75 +1036,75 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#333',
-    backgroundColor: '#fafbfc',
+    color: "#333",
+    backgroundColor: "#fafbfc",
   },
   buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
     marginTop: 8,
   },
   cancelButton: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: "#e0e0e0",
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 18,
     marginRight: 10,
   },
   cancelButtonText: {
-    color: '#333',
+    color: "#333",
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   saveButton: {
-    backgroundColor: '#4a6da7',
+    backgroundColor: "#4a6da7",
     borderRadius: 8,
     paddingVertical: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
     paddingHorizontal: 18,
   },
   saveButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   disabledButton: {
     opacity: 0.6,
   },
   statsSection: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 20,
     marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 16,
   },
   statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   statCard: {
-    width: '48%',
+    width: "48%",
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
@@ -1001,76 +1112,76 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   statIcon: {
-    position: 'absolute',
+    position: "absolute",
     top: 14,
     right: 14,
   },
   settingsSection: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 20,
     marginBottom: 16,
   },
   settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   settingLabelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   settingIcon: {
     marginRight: 12,
   },
   settingLabel: {
     fontSize: 16,
-    color: '#333',
+    color: "#333",
   },
   orderCountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
     borderRadius: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   orderCountButton: {
     width: 36,
     height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
   },
   orderCountInput: {
     width: 40,
     height: 36,
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: 16,
-    color: '#333',
+    color: "#333",
   },
   actionsSection: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     marginBottom: 16,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   actionIcon: {
     marginRight: 16,
@@ -1078,99 +1189,99 @@ const styles = StyleSheet.create({
   actionText: {
     flex: 1,
     fontSize: 16,
-    color: '#333',
+    color: "#333",
   },
   actionArrow: {
     marginLeft: 8,
   },
   footer: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 20,
   },
   version: {
     fontSize: 14,
-    color: '#999',
+    color: "#999",
   },
   // Added missing styles below
   menuSection: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     marginBottom: 16,
     borderRadius: 12,
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   menuIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 16,
   },
   menuContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   menuText: {
     fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
+    color: "#333",
+    fontWeight: "500",
   },
   logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
     borderRadius: 8,
     paddingVertical: 14,
     marginHorizontal: 20,
     marginTop: 16,
     borderWidth: 1,
-    borderColor: '#f44336',
+    borderColor: "#f44336",
   },
   logoutText: {
-    color: '#f44336',
+    color: "#f44336",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginLeft: 8,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContainer: {
-    width: '90%',
-    backgroundColor: '#fff',
+    width: "90%",
+    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 5,
   },
   modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   closeButton: {
     padding: 4,
@@ -1179,13 +1290,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   changePasswordButton: {
-    backgroundColor: '#4a6da7',
+    backgroundColor: "#4a6da7",
     borderRadius: 8,
   },
   changePasswordText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   addressInput: {
     marginTop: 8,
