@@ -7,6 +7,7 @@ import {
   Image,
   ActivityIndicator,
   FlatList,
+  SafeAreaView
 } from "react-native";
 import React, { useEffect, useState } from "react";
 import { useRoute } from "@react-navigation/native";
@@ -67,120 +68,126 @@ const AssignDelivery = () => {
   );
 
   return (
-    <>
-      {!destinationLatitude && item ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
-          <Text style={{ marginBottom: 10 }}>
-            Waiting for delivery location...
-          </Text>
-          <ActivityIndicator size="large" color="#0000ff" />
-        </View>
-      ) : (
-        <FlatList
-          data={[1]}
-          style={styles.container}
-          keyboardShouldPersistTaps="handled"
-          renderItem={() => (
-            <>
-              <View style={styles.headerContainer}>
-                <Text style={styles.title}>Assign Delivery Person</Text>
-                <TouchableOpacity
-                  style={styles.iconContainer}
-                  onPress={() => {
-                    navigation.navigate("Deliveries");
+    <SafeAreaView style={{ flex: 1 }}>
+      <>
+        {!destinationLatitude && item ? (
+          <View
+            style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+          >
+            <Text style={{ marginBottom: 10 }}>
+              Waiting for delivery location...
+            </Text>
+            <ActivityIndicator size="large" color="#0000ff" />
+          </View>
+        ) : (
+          <FlatList
+            data={[1]}
+            style={styles.container}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => (
+              <>
+                <View style={styles.headerContainer}>
+                  <Text style={styles.title}>Assign Delivery Person</Text>
+                  <TouchableOpacity
+                    style={styles.iconContainer}
+                    onPress={() => {
+                      navigation.navigate("Deliveries");
+                    }}
+                  >
+                    <Ionicons name="arrow-back" size={24} color="black" />
+                  </TouchableOpacity>
+                </View>
+
+                <MapsSearchBar
+                  stylesPasses={styles.locationInput}
+                  placeholderText="Enter location to deliver from"
+                  onSelectFunction={(data, details) => {
+                    setLocationToDeliverFrom({
+                      address: data.description,
+                      position: details.geometry.location,
+                    });
+                    console.log("set", {
+                      address: data.description,
+                      position: details.geometry.location,
+                    });
+                    navigation.navigate("FindDeliveryPersonel", {
+                      address: data.description,
+                      position: details.geometry.location,
+                    });
                   }}
-                >
-                  <Ionicons name="arrow-back" size={24} color="black" />
-                </TouchableOpacity>
-              </View>
-
-              <MapsSearchBar
-                stylesPasses={styles.locationInput}
-                placeholderText="Enter location to deliver from"
-                onSelectFunction={(data, details) => {
-                  setLocationToDeliverFrom({
-                    address: data.description,
-                    position: details.geometry.location,
-                  });
-                  console.log("set", {
-                    address: data.description,
-                    position: details.geometry.location,
-                  });
-                  navigation.navigate("FindDeliveryPersonel", {
-                    address: data.description,
-                    position: details.geometry.location,
-                  });
-                }}
-              />
-              <View style={styles.currentLocationContainer}>
-                <Text style={styles.currentLocationText}>
-                  Your current location
-                </Text>
-                <View style={styles.mapViewContainer}>
-                  <Map />
+                />
+                <View style={styles.currentLocationContainer}>
+                  <Text style={styles.currentLocationText}>
+                    Your current location
+                  </Text>
+                  <View style={styles.mapViewContainer}>
+                    <Map />
+                  </View>
                 </View>
-              </View>
-            </>
-          )}
-          ListFooterComponent={() => (
-            <>
-              <View style={styles.orderDetailsContainer}>
-                <Text style={styles.currentLocationText}>Order Details</Text>
-                <View style={styles.orderDetailsCard}>
-                  <View style={styles.firstRow}>
-                    <Image
-                      source={{
-                        uri: `https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=600&height=400&center=lonlat:${destinationLongitude},${destinationLatitude}&zoom=14&apiKey=${process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY}`,
-                      }}
-                      style={styles.tinyMap}
-                    />
-                    <View style={styles.descriptionContainer}>
-                      <View style={styles.descriptionTextContainer}>
-                        <AntDesign name="user" size={24} color="black" />
-                        <Text>{orderSelected?.customerInfo?.name}</Text>
+              </>
+            )}
+            ListFooterComponent={() => (
+              <>
+                <View style={styles.orderDetailsContainer}>
+                  <Text style={styles.currentLocationText}>Order Details</Text>
+                  <View style={styles.orderDetailsCard}>
+                    <View style={styles.firstRow}>
+                      <Image
+                        source={{
+                          uri: `https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=600&height=400&center=lonlat:${destinationLongitude},${destinationLatitude}&zoom=14&apiKey=${process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY}`,
+                        }}
+                        style={styles.tinyMap}
+                      />
+                      <View style={styles.descriptionContainer}>
+                        <View style={styles.descriptionTextContainer}>
+                          <AntDesign name="user" size={24} color="black" />
+                          <Text>{orderSelected?.customerInfo?.name}</Text>
+                        </View>
+                        <View style={styles.descriptionTextContainer}>
+                          <Ionicons
+                            name="location-outline"
+                            size={24}
+                            color="black"
+                          />
+                          <Text>{destinationAdress}</Text>
+                        </View>
                       </View>
-                      <View style={styles.descriptionTextContainer}>
-                        <Ionicons
-                          name="location-outline"
-                          size={24}
-                          color="black"
-                        />
-                        <Text>{destinationAdress}</Text>
+                    </View>
+                    <View style={styles.secondRow}>
+                      <View style={styles.secondRowDetails}>
+                        <Text style={styles.secondRowText}>Order Date</Text>
+                        <Text style={styles.secondRowText}>
+                          {formattedDate}, {ago}
+                        </Text>
+                      </View>
+                      <View style={styles.secondRowDetails}>
+                        <Text style={styles.secondRowText}>Order Number</Text>
+                        <Text style={styles.secondRowText}>
+                          {orderSelected?.orderNumber}
+                        </Text>
+                      </View>
+                      <View style={styles.secondRowDetails}>
+                        <Text style={styles.secondRowText}>Delivery Fee</Text>
+                        <Text style={styles.secondRowText}>
+                          ksh {orderSelected?.deliveryFee}
+                        </Text>
+                      </View>
+
+                      <View style={styles.secondRowDetails}>
+                        <Text style={styles.secondRowText}>Total</Text>
+                        <Text style={styles.secondRowText}>
+                          {orderSelected?.total}
+                        </Text>
                       </View>
                     </View>
                   </View>
-                  <View style={styles.secondRow}>
-                    <View style={styles.secondRowDetails}>
-                      <Text style={styles.secondRowText}>Order Date</Text>
-                      <Text style={styles.secondRowText}>
-                        {formattedDate}, {ago}
-                      </Text>
-                    </View>
-                    <View style={styles.secondRowDetails}>
-                      <Text style={styles.secondRowText}>Order Number</Text>
-                      <Text style={styles.secondRowText}>{orderSelected?.orderNumber}</Text>
-                    </View>
-                    <View style={styles.secondRowDetails}>
-                      <Text style={styles.secondRowText}>Delivery Fee</Text>
-                      <Text style={styles.secondRowText}>
-                        ksh {orderSelected?.deliveryFee}
-                      </Text>
-                    </View>
-
-                    <View style={styles.secondRowDetails}>
-                      <Text style={styles.secondRowText}>Total</Text>
-                      <Text style={styles.secondRowText}>{orderSelected?.total}</Text>
-                    </View>
-                  </View>
                 </View>
-              </View>
-            </>
-          )}
-        />
-      )}
-    </>
+              </>
+            )}
+          />
+        )}
+      </>
+    </SafeAreaView>
   );
 };
 

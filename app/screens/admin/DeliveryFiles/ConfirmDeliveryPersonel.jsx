@@ -5,7 +5,7 @@ import {
   View,
   TouchableOpacity,
 } from "react-native";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import DeliveryPersonelLayout from "./DeliveryPersonelLayout";
 import DriverCard from "./DriverCard";
 
@@ -17,6 +17,7 @@ import { sortDeliveryPersonsByDistance } from "../../../../utils/MapUtilFunction
 
 //zustand
 import useStore from "../../../../utils/useStore";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const ConfirmDeliveryPersonel = () => {
   //zustand
@@ -46,31 +47,45 @@ const ConfirmDeliveryPersonel = () => {
     location
   );
 
+  const [selected, setSelected] = useState(null);
+
   return (
-    <DeliveryPersonelLayout
-      title="Confirm Delivery Personel"
-      snapPoints={["30%", "40%", "65%", "85%"]}
-    >
-      <FlatList
-        data={orderedSortedDeliveryPersonel}
-        renderItem={({ item }) => <DriverCard selected={"1"} item={item} />}
-        ListFooterComponent={() => (
-          <View style={{ justifyContent: "center", alignItems: "center" }}>
-            <TouchableOpacity
-              style={styles.findDeliveryPersonelButton}
-              onPress={() => {
-                // navigation.navigate("ConfirmDeliveryPersonel", {
-                //   locationToDeliverFrom,
-                // });
-                console.log("Selecteed");
+    <SafeAreaView style={{ flex: 1 }}>
+      <DeliveryPersonelLayout
+        title="Confirm Delivery Personel"
+        snapPoints={["30%", "40%", "65%", "85%"]}
+      >
+        <FlatList
+          data={orderedSortedDeliveryPersonel}
+          keyboardShouldPersistTaps="handled"
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <DriverCard
+              selected={selected}
+              item={item}
+              setSelected={() => {
+               setSelected(item.id);
               }}
-            >
-              <Text style={{ color: "white" }}>Confirm dispatch</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      />
-    </DeliveryPersonelLayout>
+            />
+          )}
+          ListFooterComponent={() => (
+            <View style={{ justifyContent: "center", alignItems: "center" }}>
+              <TouchableOpacity
+                style={styles.findDeliveryPersonelButton}
+                onPress={() => {
+                  // navigation.navigate("ConfirmDeliveryPersonel", {
+                  //   locationToDeliverFrom,
+                  // });
+                  console.log("Selecteed");
+                }}
+              >
+                <Text style={{ color: "white" }}>Confirm dispatch</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        />
+      </DeliveryPersonelLayout>
+    </SafeAreaView>
   );
 };
 
