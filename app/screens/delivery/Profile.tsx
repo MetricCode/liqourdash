@@ -4,27 +4,22 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   Image,
-  Switch,
-  TextInput,
-  Alert,
-  ActivityIndicator,
+  SafeAreaView,
   StatusBar,
-  RefreshControl,
+  ActivityIndicator,
+  Alert,
+  TextInput,
   Modal,
+  RefreshControl,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FIREBASE_AUTH, FIREBASE_DB } from "../../../FirebaseConfig";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import {
   signOut,
   updateProfile,
@@ -32,69 +27,67 @@ import {
   reauthenticateWithCredential,
   updatePassword,
 } from "firebase/auth";
-import { useNavigation, useIsFocused } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import MapsSearchBar from "../shared/MapsSearchBar";
-import { KeyboardAvoidingView, Platform } from "react-native";
+import useStore from "../../../utils/useStore";
 
-const DeliveryProfile = () => {
+// Custom component to handle wrapping MapsSearchBar
+type LocationSearchBarProps = {
+  onSelect: (data: any, details: any) => void;
+  placeholder?: string;
+  defaultValue?: string;
+};
+const LocationSearchBar = ({ onSelect, placeholder, defaultValue }: LocationSearchBarProps) => {
+  return (
+    <View style={styles.searchBarContainer}>
+      <MapsSearchBar
+        stylesPasses={[styles.input, styles.addressInput]}
+        inputContainerStyle={styles.searchBarInputContainer}
+        placeholderText={placeholder || "Enter your address"}
+        onSelectFunction={onSelect}
+        Icon={Ionicons}
+        iconName="location-outline"
+      />
+    </View>
+  );
+};
+
+const CustomerProfile = () => {
   const navigation = useNavigation();
-  const isFocused = useIsFocused();
   const auth = FIREBASE_AUTH;
   const user = auth.currentUser;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
 
-  // Password change state
-  const [passwordModal, setPasswordModal] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
+  //fetch current location from store and set that as default address
+  const currentLocation = useStore((state) => state.myStoredLocation);
+  useEffect(() => {
+    console.log("current location", currentLocation);
+  }, [currentLocation]);
 
-  // User profile state
-  type UserProfile = {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-    position: object;
-    isAvailable: boolean;
-    currentOrders: any[];
-    maxConcurrentOrders: number;
-    joinDate: string;
-    photoURL: string | null;
-    currentLocation: string;
-  };
-
-  const [userProfile, setUserProfile] = useState<UserProfile>({
+  const [userProfile, setUserProfile] = useState({
     name: user?.displayName || "",
     email: user?.email || "",
     phone: "",
     address: "",
     position: {},
-    isAvailable: false, // New field for availability status
-    currentOrders: [], // New field for tracking active deliveries
-    maxConcurrentOrders: 3, // New field for order capacity
-    joinDate: "N/A", // Add joinDate to fix type error
-    photoURL: null,
-    currentLocation: "",
+    createdAt: null,
   });
 
-  // Availability settings - Fix: sync with userProfile
-  const [isAvailable, setIsAvailable] = useState(false);
-  const [maxConcurrentOrders, setMaxConcurrentOrders] = useState("3");
+  useEffect(() => {
+    if (user) {
+      console.log("Current authenticated user UID:", user.uid);
+    }
+  }, [user]);
 
-  // Performance stats
-  const [stats, setStats] = useState({
-    totalDeliveries: 0,
-    totalDistance: 0,
-    avgRating: 4.8,
-    completionRate: 98,
-  });
+  const [editMode, setEditMode] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [passwordModal, setPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // Fetch user profile data
   const fetchUserProfile = useCallback(async () => {
@@ -105,71 +98,33 @@ const DeliveryProfile = () => {
     }
 
     try {
+      console.log("Fetching profile for user:", user.uid);
+      
       const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
       const profileSnap = await getDoc(profileRef);
 
-      if (!profileSnap.exists()) {
-        await setDoc(profileRef, {
-          name: user.displayName || "",
-          email: user.email || "",
-          phone: "",
-          address: "",
-          position: {},
-          isAvailable: false,
-          currentOrders: [],
-          maxConcurrentOrders: 3,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          role: "delivery",
-        });
-
-        setUserProfile({
-          name: user.displayName || "",
-          email: user.email || "",
-          phone: "",
-          address: "",
-          position: {},
-          isAvailable: false,
-          currentOrders: [],
-          maxConcurrentOrders: 3,
-          joinDate: "N/A",
-          photoURL: null,
-          currentLocation: "",
-        });
-
-        // Sync availability settings
-        setIsAvailable(false);
-        setMaxConcurrentOrders("3");
-      } else {
+      if (profileSnap.exists()) {
+        console.log("Profile document exists");
         const data = profileSnap.data();
-        const isUserAvailable =
-          typeof data.isAvailable === "boolean" ? data.isAvailable : false;
-        const userMaxOrders =
-          typeof data.maxConcurrentOrders === "number"
-            ? data.maxConcurrentOrders
-            : 3;
-
         setUserProfile({
           name: user.displayName || data.name || "",
           email: user.email || data.email || "",
           phone: data.phone || "",
           address: data.address || "",
           position: data.position || {},
-          isAvailable: isUserAvailable,
-          currentOrders: Array.isArray(data.currentOrders)
-            ? data.currentOrders
-            : [],
-          maxConcurrentOrders: userMaxOrders,
-          joinDate: data.createdAt
-            ? new Date(data.createdAt.seconds * 1000).toLocaleDateString()
-            : "N/A",
-          photoURL: data.photoURL || null,
-          currentLocation: data.address || "",
+          createdAt: data.createdAt || null,
         });
-
-        // Sync availability settings - Fix: sync with userProfile
-        setIsAvailable(isUserAvailable);
-        setMaxConcurrentOrders(userMaxOrders.toString());
+      } else {
+        console.log("Profile document does not exist, will create on save");
+        // If no profile exists, use what we have from user auth
+        setUserProfile({
+          name: user.displayName || "",
+          email: user.email || "",
+          phone: "",
+          address: "",
+          position: {},
+          createdAt: null,
+        });
       }
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -180,12 +135,10 @@ const DeliveryProfile = () => {
     }
   }, [user]);
 
-  // Initial load and refresh of profile data
+  // Initial load of profile data
   useEffect(() => {
-    if (isFocused) {
-      fetchUserProfile();
-    }
-  }, [fetchUserProfile, isFocused]);
+    fetchUserProfile();
+  }, [fetchUserProfile]);
 
   // Handle pull-to-refresh
   const onRefresh = useCallback(() => {
@@ -193,7 +146,7 @@ const DeliveryProfile = () => {
     fetchUserProfile();
   }, [fetchUserProfile]);
 
-  // Handle saving profile
+
   const handleSaveProfile = async () => {
     if (!user) return;
 
@@ -205,13 +158,16 @@ const DeliveryProfile = () => {
     try {
       setSavingProfile(true);
 
-      // Update Firestore profile
+      // Update Firestore profile - use setDoc with merge instead of updateDoc
       const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
-      await updateDoc(profileRef, {
+      await setDoc(profileRef, {
         name: userProfile.name,
         phone: userProfile.phone,
+        address: userProfile.address,
+        position: userProfile.position,
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      }, { merge: true }); // merge: true will create if doesn't exist
 
       // Update Auth display name if changed
       if (user.displayName !== userProfile.name) {
@@ -227,55 +183,6 @@ const DeliveryProfile = () => {
       Alert.alert("Error", "Failed to update profile information");
     } finally {
       setSavingProfile(false);
-    }
-  };
-
-  // Handle saving availability settings
-  const handleSaveSettings = async () => {
-    if (!user) return;
-
-    try {
-      setSavingSettings(true);
-
-      // Validate that location is provided if available
-      if (isAvailable && !userProfile.address?.trim()) {
-        Alert.alert(
-          "Error",
-          "Please enter your current location when setting yourself as available"
-        );
-        return;
-      }
-
-      const maxOrders = parseInt(maxConcurrentOrders, 10) || 3;
-
-      const updateData = {
-        isAvailable: isAvailable,
-        maxConcurrentOrders: maxOrders,
-        lastUpdated: serverTimestamp(),
-        address: userProfile.address,
-        position: userProfile.position,
-      };
-
-      // Update both collections
-      const userRef = doc(FIREBASE_DB, "users", user.uid);
-      await updateDoc(userRef, updateData);
-
-      const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
-      await updateDoc(profileRef, updateData);
-
-      // Fix: Update local state to match what was saved to Firebase
-      setUserProfile((prev) => ({
-        ...prev,
-        isAvailable: isAvailable,
-        maxConcurrentOrders: maxOrders,
-      }));
-
-      Alert.alert("Success", "Your availability settings have been updated");
-    } catch (error) {
-      console.error("Error saving settings:", error);
-      Alert.alert("Error", "Failed to save settings");
-    } finally {
-      setSavingSettings(false);
     }
   };
 
@@ -339,7 +246,7 @@ const DeliveryProfile = () => {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      // Navigation will be handled by App.tsx onAuthStateChanged
+      // Navigation will be handled by App.tsx when auth state changes
     } catch (error) {
       console.error("Error signing out:", error);
       Alert.alert("Error", "Failed to sign out. Please try again.");
@@ -348,45 +255,42 @@ const DeliveryProfile = () => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4a6da7" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4a6da7" />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9f9f9" />
-      <KeyboardAvoidingView
+      <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
+        style={{flex: 1}}
         keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
       >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Profile</Text>
-          {/* Fix: Add Edit button to header */}
-          {!editMode ? (
+          {!editMode && (
             <TouchableOpacity
               style={styles.editButton}
               onPress={() => setEditMode(true)}
             >
-              <Ionicons name="create-outline" size={20} color="#4a6da7" />
+              <Ionicons name="create-outline" size={22} color="#4a6da7" />
               <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
-          ) : null}
+          )}
         </View>
-
-     
+        
         <FlatList
           data={["1"]}
-          // Placeholder for any additional content
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
           style={{ flex: 1 }}
           nestedScrollEnabled={true}
+          keyboardDismissMode="on-drag"
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -399,21 +303,13 @@ const DeliveryProfile = () => {
           }
           renderItem={() => (
             <>
-              {/* Profile Section */}
               <View style={styles.profileSection}>
                 <View style={styles.avatarContainer}>
-                  {userProfile.photoURL ? (
-                    <Image
-                      source={{ uri: userProfile.photoURL }}
-                      style={styles.avatar}
-                    />
-                  ) : (
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>
-                        {userProfile.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {userProfile.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
                   <Text style={styles.userName}>{userProfile.name}</Text>
                   <Text style={styles.userEmail}>{userProfile.email}</Text>
                 </View>
@@ -447,21 +343,24 @@ const DeliveryProfile = () => {
                       />
                     </View>
 
-                    {/* Fix: Add location field in edit mode */}
                     <View style={styles.formField}>
-                      <Text style={styles.fieldLabel}>Current Location</Text>
-
-                      <MapsSearchBar
-                        stylesPasses={[styles.input, styles.addressInput]}
-                        placeholderText={false}
-                        onSelectFunction={(data, details) => {
-                          setUserProfile({
-                            ...userProfile,
-                            address: data.description,
-                            position: details.geometry.location,
-                          });
-                        }}
-                      />
+                      <Text style={styles.fieldLabel}>Delivery Address</Text>
+                      <View style={styles.searchBarContainer}>
+                        <MapsSearchBar
+                          stylesPasses={[styles.input, styles.addressInput]}
+                          inputContainerStyle={styles.searchBarInputContainer}
+                          placeholderText="Enter your delivery address"
+                          onSelectFunction={(data: any, details: any) => {
+                            setUserProfile({
+                              ...userProfile,
+                              address: data.description,
+                              position: details.geometry.location,
+                            });
+                          }}
+                          Icon={Ionicons}
+                          iconName="location-outline"
+                        />
+                      </View>
                     </View>
 
                     <View style={styles.buttonRow}>
@@ -484,9 +383,7 @@ const DeliveryProfile = () => {
                         {savingProfile ? (
                           <ActivityIndicator size="small" color="white" />
                         ) : (
-                          <Text style={styles.saveButtonText}>
-                            Save Changes
-                          </Text>
+                          <Text style={styles.saveButtonText}>Save Changes</Text>
                         )}
                       </TouchableOpacity>
                     </View>
@@ -495,11 +392,7 @@ const DeliveryProfile = () => {
                   <View style={styles.infoContainer}>
                     <View style={styles.infoRow}>
                       <View style={styles.infoIcon}>
-                        <Ionicons
-                          name="call-outline"
-                          size={20}
-                          color="#4a6da7"
-                        />
+                        <Ionicons name="call-outline" size={20} color="#4a6da7" />
                       </View>
                       <View style={styles.infoContent}>
                         <Text style={styles.infoLabel}>Phone Number</Text>
@@ -511,276 +404,42 @@ const DeliveryProfile = () => {
 
                     <View style={styles.infoRow}>
                       <View style={styles.infoIcon}>
-                        <Ionicons
-                          name="location-outline"
-                          size={20}
-                          color="#4a6da7"
-                        />
+                        <Ionicons name="location-outline" size={20} color="#4a6da7" />
                       </View>
                       <View style={styles.infoContent}>
-                        <Text style={styles.infoLabel}>Current Location</Text>
+                        <Text style={styles.infoLabel}>Delivery Address</Text>
                         <Text style={styles.infoValue}>
                           {userProfile.address || "Not set"}
                         </Text>
                       </View>
                     </View>
-
-                    <View style={styles.infoRow}>
-                      <View style={styles.infoIcon}>
-                        <Ionicons
-                          name="calendar-outline"
-                          size={20}
-                          color="#4a6da7"
-                        />
-                      </View>
-                      <View style={styles.infoContent}>
-                        <Text style={styles.infoLabel}>Member Since</Text>
-                        <Text style={styles.infoValue}>
-                          {userProfile.joinDate}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.infoRow}>
-                      <View style={styles.infoIcon}>
-                        <Ionicons
-                          name="checkmark-circle-outline"
-                          size={20}
-                          color="#4a6da7"
-                        />
-                      </View>
-                      <View style={styles.infoContent}>
-                        <Text style={styles.infoLabel}>
-                          Availability Status
-                        </Text>
-                        <Text style={styles.infoValue}>
-                          {userProfile.isAvailable
-                            ? "Available"
-                            : "Not Available"}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.infoRow}>
-                      <View style={styles.infoIcon}>
-                        <Ionicons
-                          name="bicycle-outline"
-                          size={20}
-                          color="#4a6da7"
-                        />
-                      </View>
-                      <View style={styles.infoContent}>
-                        <Text style={styles.infoLabel}>Order Capacity</Text>
-                        <Text style={styles.infoValue}>
-                          {userProfile.maxConcurrentOrders} concurrent orders
-                        </Text>
-                      </View>
-                    </View>
                   </View>
                 )}
               </View>
 
-              {/* Performance Stats Section */}
-              <View style={styles.statsSection}>
-                <Text style={styles.sectionTitle}>Performance Stats</Text>
-                <View style={styles.statsGrid}>
-                  <View
-                    style={[styles.statCard, { backgroundColor: "#e8f5e9" }]}
-                  >
-                    <Text style={styles.statValue}>
-                      {stats.totalDeliveries}
-                    </Text>
-                    <Text style={styles.statLabel}>Deliveries</Text>
-                    <Ionicons
-                      name="bicycle-outline"
-                      size={24}
-                      color="#388e3c"
-                      style={styles.statIcon}
-                    />
-                  </View>
-
-                  <View
-                    style={[styles.statCard, { backgroundColor: "#e3f2fd" }]}
-                  >
-                    <Text style={styles.statValue}>
-                      {stats.totalDistance} mi
-                    </Text>
-                    <Text style={styles.statLabel}>Distance</Text>
-                    <Ionicons
-                      name="speedometer-outline"
-                      size={24}
-                      color="#1976d2"
-                      style={styles.statIcon}
-                    />
-                  </View>
-
-                  <View
-                    style={[styles.statCard, { backgroundColor: "#fff3e0" }]}
-                  >
-                    <Text style={styles.statValue}>{stats.avgRating}★</Text>
-                    <Text style={styles.statLabel}>Rating</Text>
-                    <Ionicons
-                      name="star-outline"
-                      size={24}
-                      color="#f57c00"
-                      style={styles.statIcon}
-                    />
-                  </View>
-
-                  <View
-                    style={[styles.statCard, { backgroundColor: "#f3e5f5" }]}
-                  >
-                    <Text style={styles.statValue}>
-                      {stats.completionRate}%
-                    </Text>
-                    <Text style={styles.statLabel}>Completion</Text>
-                    <Ionicons
-                      name="checkmark-circle-outline"
-                      size={24}
-                      color="#9c27b0"
-                      style={styles.statIcon}
-                    />
-                  </View>
-                </View>
-              </View>
-
-              {/* Availability Settings Section */}
-              <View style={styles.settingsSection}>
-                <Text style={styles.sectionTitle}>Availability Settings</Text>
-
-                <View style={styles.settingRow}>
-                  <View style={styles.settingLabelContainer}>
-                    <Ionicons
-                      name="person-outline"
-                      size={20}
-                      color="#4a6da7"
-                      style={styles.settingIcon}
-                    />
-                    <Text style={styles.settingLabel}>
-                      Available for Deliveries
-                    </Text>
-                  </View>
-                  <Switch
-                    value={isAvailable}
-                    onValueChange={setIsAvailable}
-                    trackColor={{ false: "#d1d1d1", true: "#b3d2ea" }}
-                    thumbColor={isAvailable ? "#4a6da7" : "#f4f3f4"}
-                    ios_backgroundColor="#d1d1d1"
-                  />
-                </View>
-
-                {/* Location input field */}
-                {isAvailable && (
-                  <View style={styles.formField}>
-                    <Text style={styles.fieldLabel}>Current Location</Text>
-                    <MapsSearchBar
-                      stylesPasses={[styles.input, styles.addressInput]}
-                      placeholderText={false}
-                      onSelectFunction={(data, details) => {
-                        setUserProfile({
-                          ...userProfile,
-                          address: data.description,
-                          position: details.geometry.location,
-                        });
-                      }}
-                    />
-                  </View>
-                )}
-
-                <View style={styles.settingRow}>
-                  <View style={styles.settingLabelContainer}>
-                    <Ionicons
-                      name="layers-outline"
-                      size={20}
-                      color="#4a6da7"
-                      style={styles.settingIcon}
-                    />
-                    <Text style={styles.settingLabel}>
-                      Max Concurrent Orders
-                    </Text>
-                  </View>
-                  <View style={styles.orderCountContainer}>
-                    <TouchableOpacity
-                      style={styles.orderCountButton}
-                      onPress={() => {
-                        const currentValue =
-                          parseInt(maxConcurrentOrders, 10) || 1;
-                        if (currentValue > 1) {
-                          setMaxConcurrentOrders((currentValue - 1).toString());
-                        }
-                      }}
-                    >
-                      <Ionicons name="remove" size={18} color="#4a6da7" />
-                    </TouchableOpacity>
-
-                    <TextInput
-                      style={styles.orderCountInput}
-                      value={maxConcurrentOrders}
-                      onChangeText={(text) => {
-                        const numericValue = text.replace(/[^0-9]/g, "");
-                        setMaxConcurrentOrders(numericValue);
-                      }}
-                      keyboardType="numeric"
-                      maxLength={2}
-                    />
-
-                    <TouchableOpacity
-                      style={styles.orderCountButton}
-                      onPress={() => {
-                        const currentValue =
-                          parseInt(maxConcurrentOrders, 10) || 0;
-                        setMaxConcurrentOrders((currentValue + 1).toString());
-                      }}
-                    >
-                      <Ionicons name="add" size={18} color="#4a6da7" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={[
-                    styles.saveButton,
-                    savingSettings && styles.disabledButton,
-                  ]}
-                  onPress={handleSaveSettings}
-                  disabled={savingSettings}
-                >
-                  {savingSettings ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Save Settings</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Account Actions */}
               <View style={styles.menuSection}>
                 <TouchableOpacity
                   style={styles.menuItem}
-                  onPress={() => navigation.navigate("Routes" as never)}
+                  onPress={() => navigation.navigate("Orders" as never)}
                 >
-                  <View
-                    style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}
-                  >
-                    <Ionicons name="map-outline" size={22} color="#1976d2" />
+                  <View style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}>
+                    <Ionicons name="receipt-outline" size={22} color="#1976d2" />
                   </View>
                   <View style={styles.menuContent}>
-                    <Text style={styles.menuText}>My Routes</Text>
+                    <Text style={styles.menuText}>My Orders</Text>
                     <Ionicons name="chevron-forward" size={20} color="#ccc" />
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.menuItem}
-                  onPress={() => navigation.navigate("History" as never)}
+                  onPress={() => navigation.navigate("Cart" as never)}
                 >
-                  <View
-                    style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}
-                  >
-                    <Ionicons name="time-outline" size={22} color="#388e3c" />
+                  <View style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}>
+                    <Ionicons name="cart-outline" size={22} color="#388e3c" />
                   </View>
                   <View style={styles.menuContent}>
-                    <Text style={styles.menuText}>Delivery History</Text>
+                    <Text style={styles.menuText}>My Cart</Text>
                     <Ionicons name="chevron-forward" size={20} color="#ccc" />
                   </View>
                 </TouchableOpacity>
@@ -789,17 +448,45 @@ const DeliveryProfile = () => {
                   style={styles.menuItem}
                   onPress={() => setPasswordModal(true)}
                 >
-                  <View
-                    style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={22}
-                      color="#f57c00"
-                    />
+                  <View style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}>
+                    <Ionicons name="lock-closed-outline" size={22} color="#f57c00" />
                   </View>
                   <View style={styles.menuContent}>
                     <Text style={styles.menuText}>Change Password</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    Alert.alert(
+                      "Contact Support",
+                      "Do you need help with your account?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Call Support",
+                          onPress: () =>
+                            Alert.alert(
+                              "Support",
+                              "Customer support: +254-XXX-XXX-XXX"
+                            ),
+                        },
+                        {
+                          text: "Send Email",
+                          onPress: () =>
+                            Alert.alert("Email", "support@liquordash.com"),
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <View style={[styles.menuIcon, { backgroundColor: "#e1f5fe" }]}>
+                    <Ionicons name="help-circle-outline" size={22} color="#0288d1" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuText}>Help & Support</Text>
                     <Ionicons name="chevron-forward" size={20} color="#ccc" />
                   </View>
                 </TouchableOpacity>
@@ -823,7 +510,7 @@ const DeliveryProfile = () => {
               </TouchableOpacity>
             </>
           )}
-        ></FlatList>
+        />
       </KeyboardAvoidingView>
 
       {/* Change Password Modal */}
@@ -910,7 +597,7 @@ const DeliveryProfile = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#f9f9f9",
   },
   loadingContainer: {
     flex: 1,
@@ -924,7 +611,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between", // Fix: Changed from center to space-between
+    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 15,
@@ -932,49 +619,39 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#4a6da7",
+  },
   editButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#e3f2fd",
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
   },
   editButtonText: {
-    color: "#4a6da7",
     fontSize: 16,
     fontWeight: "600",
-    marginLeft: 6,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
+    color: "#4a6da7",
+    marginLeft: 5,
   },
   content: {
-    flexGrow: 1,
     padding: 20,
     paddingBottom: 40,
   },
   profileSection: {
     backgroundColor: "white",
+    borderRadius: 16,
     padding: 20,
-    marginBottom: 16,
-    borderRadius: 12, // Fix: Added border radius for consistent look
-    shadowColor: "#000", // Fix: Added shadow for depth
-    shadowOffset: { width: 0, height: 1 },
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  profileHeader: {
-    flexDirection: "row",
-    alignItems: "center",
+    shadowRadius: 3,
+    elevation: 2,
   },
   avatarContainer: {
-    marginRight: 16,
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 20,
   },
   avatar: {
     width: 80,
@@ -983,6 +660,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#4a6da7",
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 10,
   },
   avatarText: {
     fontSize: 32,
@@ -990,230 +668,117 @@ const styles = StyleSheet.create({
     color: "white",
   },
   userName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#333",
-    marginTop: 8,
+    marginBottom: 5,
   },
   userEmail: {
     fontSize: 14,
     color: "#666",
-    marginBottom: 8,
   },
   divider: {
     height: 1,
     backgroundColor: "#f0f0f0",
-    marginVertical: 16,
+    marginBottom: 20,
   },
   infoContainer: {
-    marginTop: 8,
+    marginBottom: 10,
   },
   infoRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 15,
   },
   infoIcon: {
-    marginRight: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#e3f2fd",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
   },
   infoContent: {
     flex: 1,
   },
   infoLabel: {
     fontSize: 14,
-    color: "#888",
+    color: "#666",
+    marginBottom: 5,
   },
   infoValue: {
     fontSize: 16,
     color: "#333",
-    fontWeight: "500",
   },
   formContainer: {
-    marginTop: 8,
+    marginBottom: 10,
   },
   formField: {
-    marginBottom: 16,
+    marginBottom: 15,
   },
   fieldLabel: {
     fontSize: 14,
     color: "#666",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 12,
+    padding: 12,
     fontSize: 16,
     color: "#333",
-    backgroundColor: "#fafbfc",
+  },
+  addressInput: {
+    // minHeight: 80,
+    textAlignVertical: "top",
   },
   buttonRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    marginTop: 8,
+    justifyContent: "space-between",
+    marginTop: 10,
   },
   cancelButton: {
-    backgroundColor: "#e0e0e0",
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    marginRight: 10,
+    flex: 0.48,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
   },
   cancelButtonText: {
-    color: "#333",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  saveButton: {
-    backgroundColor: "#4a6da7",
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 20,
-    paddingHorizontal: 18,
-  },
-  saveButtonText: {
-    color: "white",
     fontSize: 16,
     fontWeight: "600",
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  statsSection: {
-    backgroundColor: "white",
-    padding: 20,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  statCard: {
-    width: "48%",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
     color: "#666",
   },
-  statIcon: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-  },
-  settingsSection: {
-    backgroundColor: "white",
-    padding: 20,
-    marginBottom: 16,
-  },
-  settingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  saveButton: {
+    flex: 0.48,
+    backgroundColor: "#4a6da7",
+    borderRadius: 12,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  settingLabelContainer: {
-    flexDirection: "row",
     alignItems: "center",
   },
-  settingIcon: {
-    marginRight: 12,
-  },
-  settingLabel: {
+  saveButtonText: {
     fontSize: 16,
-    color: "#333",
+    fontWeight: "600",
+    color: "white",
   },
-  orderCountContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 8,
-    overflow: "hidden",
+  disabledButton: {
+    opacity: 0.7,
   },
-  orderCountButton: {
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f5f5f5",
-  },
-  orderCountInput: {
-    width: 40,
-    height: 36,
-    textAlign: "center",
-    fontSize: 16,
-    color: "#333",
-  },
-  actionsSection: {
-    backgroundColor: "white",
-    marginBottom: 16,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  actionIcon: {
-    marginRight: 16,
-  },
-  actionText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-  },
-  actionArrow: {
-    marginLeft: 8,
-  },
-  footer: {
-    alignItems: "center",
-    paddingVertical: 20,
-  },
-  version: {
-    fontSize: 14,
-    color: "#999",
-  },
-  // Added missing styles below
   menuSection: {
     backgroundColor: "white",
-    marginBottom: 16,
-    borderRadius: 12,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    overflow: "hidden",
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 15,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
@@ -1224,59 +789,52 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    marginRight: 15,
   },
   menuContent: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
   },
   menuText: {
     fontSize: 16,
     color: "#333",
-    fontWeight: "500",
   },
   logoutButton: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingVertical: 14,
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: "#f44336",
+    alignItems: "center",
+    backgroundColor: "#ffebee",
+    borderRadius: 12,
+    paddingVertical: 15,
+    marginBottom: 30,
   },
   logoutText: {
-    color: "#f44336",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
+    color: "#f44336",
     marginLeft: 8,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
   },
   modalContainer: {
-    width: "90%",
-    backgroundColor: "#fff",
+    width: "85%",
+    backgroundColor: "white",
     borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
+    overflow: "hidden",
   },
   modalHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
   modalTitle: {
     fontSize: 18,
@@ -1284,24 +842,47 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   closeButton: {
-    padding: 4,
+    width: 30,
+    height: 30,
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    marginTop: 8,
+    padding: 20,
   },
   changePasswordButton: {
     backgroundColor: "#4a6da7",
-    borderRadius: 8,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 10,
   },
   changePasswordText: {
-    color: "white",
     fontSize: 16,
     fontWeight: "600",
+    color: "white",
   },
-  addressInput: {
-    marginTop: 8,
-    textAlignVertical: "top",
-  },
+  searchBarContainer: {
+  width: '100%',
+},
+searchBarInputContainer: {
+  backgroundColor: '#f5f5f5',
+  borderRadius: 12,
+},
+searchBarListView: {
+  position: 'absolute',
+  top: '100%',
+  width: '100%',
+  zIndex: 1000,
+  elevation: 10, // for Android
+  backgroundColor: 'white',
+  borderRadius: 12,
+  maxHeight: 200,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 4,
+},
 });
 
-export default DeliveryProfile;
+export default CustomerProfile;
