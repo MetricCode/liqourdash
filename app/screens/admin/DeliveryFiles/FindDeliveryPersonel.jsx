@@ -10,6 +10,10 @@ import React, { useState, useEffect } from "react";
 import { useRoute } from "@react-navigation/native";
 import { useNavigation } from "@react-navigation/native";
 
+// Firebase
+import { FIREBASE_DB } from "../../../../FirebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
+
 // Import components
 import DeliveryPersonelLayout from "./DeliveryPersonelLayout";
 import MapsSearchBar from "../../shared/MapsSearchBar";
@@ -24,6 +28,7 @@ import useStore from "../../../../utils/useStore";
 
 const FindDeliveryPersonel = () => {
   const [loading, setLoading] = useState(false);
+  const [fetchingStoreLocation, setFetchingStoreLocation] = useState(false);
 
   // Navigation
   const navigation = useNavigation();
@@ -32,6 +37,7 @@ const FindDeliveryPersonel = () => {
   // Get data from store
   const orderSelected = useStore((state) => state.orderSelected);
   const storeLocation = useStore((state) => state.storeLocation);
+  const setStoreLocation = useStore((state) => state.setStoreLocation);
   const locationToDeliverFrom = useStore((state) => state.locationToDeliverFrom);
   const setLocationToDeliverFrom = useStore((state) => state.setLocationToDeliverFrom);
   
@@ -40,12 +46,46 @@ const FindDeliveryPersonel = () => {
   // Get pickup location (either custom location or store location)
   const pickupLocation = locationToDeliverFrom?.address || storeLocation?.address || "Default Store Location";
   
-  // Safety check to ensure we have a locationToDeliverFrom
+  // Fetch store location if not already available
   useEffect(() => {
-    if (!locationToDeliverFrom && storeLocation) {
-      setLocationToDeliverFrom(storeLocation);
-    }
-  }, [storeLocation]);
+    const fetchStoreLocation = async () => {
+      if (storeLocation || fetchingStoreLocation) return;
+      
+      try {
+        setFetchingStoreLocation(true);
+        setLoading(true);
+        
+        // Get from storeSettings collection with document ID "location"
+        const settingsRef = doc(FIREBASE_DB, "storeSettings", "location");
+        const settingsSnap = await getDoc(settingsRef);
+        
+        if (settingsSnap.exists() && setStoreLocation) {
+          const data = settingsSnap.data();
+          setStoreLocation({
+            address: data.address,
+            position: data.position
+          });
+          
+          // Also set as location to deliver from if none set
+          if (!locationToDeliverFrom) {
+            setLocationToDeliverFrom({
+              address: data.address,
+              position: data.position
+            });
+          }
+        } else {
+          console.log("No store location found in storeSettings");
+        }
+      } catch (error) {
+        console.error("Error fetching store location:", error);
+      } finally {
+        setFetchingStoreLocation(false);
+        setLoading(false);
+      }
+    };
+
+    fetchStoreLocation();
+  }, []);
 
   const handleFindDeliveryPersonnel = () => {
     // Validate if we have all required information

@@ -14,7 +14,7 @@ import { useNavigation } from "@react-navigation/native";
 
 // Firebase
 import { FIREBASE_DB } from "../../../../FirebaseConfig";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 
 // Util function
 import { sortDeliveryPersonsByDistance } from "../../../../utils/MapUtilFunctions";
@@ -26,13 +26,43 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const ConfirmDeliveryPersonel = () => {
   const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchingStoreLocation, setFetchingStoreLocation] = useState(false);
 
   // Get data from store using your existing structure
   const deliveryPersons = useStore((state) => state.deliveryPersons);
   const locationToDeliverFrom = useStore((state) => state.locationToDeliverFrom);
   const orderSelected = useStore((state) => state.orderSelected);
   const storeLocation = useStore((state) => state.storeLocation);
+  const setStoreLocation = useStore((state) => state.setStoreLocation);
   const deliveryFees = useStore((state) => state.deliveryFees || 150); // Use default if not set
+
+  // Fetch store location if not already available
+  useEffect(() => {
+    const fetchStoreLocation = async () => {
+      if (storeLocation || fetchingStoreLocation) return;
+      
+      try {
+        setFetchingStoreLocation(true);
+        // Get from storeSettings collection with document ID "location"
+        const settingsRef = doc(FIREBASE_DB, "storeSettings", "location");
+        const settingsSnap = await getDoc(settingsRef);
+        
+        if (settingsSnap.exists() && setStoreLocation) {
+          const data = settingsSnap.data();
+          setStoreLocation({
+            address: data.address,
+            position: data.position
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching store location:", error);
+      } finally {
+        setFetchingStoreLocation(false);
+      }
+    };
+
+    fetchStoreLocation();
+  }, []);
 
   // Create location object for sorting
   const location = {
@@ -156,11 +186,30 @@ const ConfirmDeliveryPersonel = () => {
                     {locationToDeliverFrom?.address || storeLocation?.address || "Default Store Location"}
                   </Text>
                 </View>
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationLabel}>Deliver to:</Text>
+                  <Text style={styles.locationText}>
+                    {orderSelected?.customerInfo?.address || "Customer Address"}
+                  </Text>
+                </View>
                 <View style={styles.divider} />
               </View>
             }
             ListFooterComponent={() => (
               <View style={styles.footerContainer}>
+                {selected ? (
+                  <View style={styles.summaryContainer}>
+                    <Text style={styles.summaryTitle}>Assignment Summary</Text>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Driver:</Text>
+                      <Text style={styles.summaryValue}>{selectedDriver?.name || "Selected Driver"}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Delivery Fee:</Text>
+                      <Text style={styles.summaryValue}>KSH {deliveryFees?.toFixed(2)}</Text>
+                    </View>
+                  </View>
+                ) : null}
                 <TouchableOpacity
                   style={[
                     styles.confirmButton,
@@ -250,6 +299,32 @@ const styles = StyleSheet.create({
   },
   footerContainer: {
     marginTop: 20
+  },
+  summaryContainer: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 20
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#4a6da7",
+    marginBottom: 10
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: "#666"
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#333"
   },
   confirmButton: {
     backgroundColor: "#4a6da7",

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 const useStore = create((set) => ({
-  // Manager data - existing
+  // Manager data
   ordersStored: [],
   setOrdersStored: (newOrders) => set({ ordersStored: [...newOrders] }),
   
@@ -21,7 +21,7 @@ const useStore = create((set) => ({
   deliveryFees: 150, // Default value in KSH
   setDeliveryFees: (newFees) => set({ deliveryFees: newFees }),
   
-  // Customer data - existing
+  // Customer data
   myStoredLocation: null,
   userAddress: null,
   customerOrders: [],
@@ -30,46 +30,26 @@ const useStore = create((set) => ({
   setMyStoredLocation: (newLocation) =>
     set({ myStoredLocation: newLocation.coords }),
     
-  // New additions
+  // New additions for store location and delivery assignment
   
-  // Store location management
+  // Store location from storeSettings/location
   storeLocation: null,
   setStoreLocation: (location) => set({ storeLocation: location }),
   
-  // Selected delivery person for assignment
-  selectedDeliveryPerson: null,
-  setSelectedDeliveryPerson: (driver) => set({ selectedDeliveryPerson: driver }),
-  
-  // Order assignment tracking
-  orderAssignments: {},
-  addOrderAssignment: (orderId, assignmentData) => 
+  // Track assigned delivery personnel for order
+  assignedDeliveryPersonnel: {},
+  setAssignedDeliveryPersonnel: (orderId, personnel) => 
     set((state) => ({ 
-      orderAssignments: { 
-        ...state.orderAssignments, 
-        [orderId]: assignmentData 
+      assignedDeliveryPersonnel: { 
+        ...state.assignedDeliveryPersonnel, 
+        [orderId]: personnel 
       } 
     })),
   
-  // Update an existing assignment
-  updateOrderAssignment: (orderId, updateData) =>
-    set((state) => {
-      if (!state.orderAssignments[orderId]) return state;
-      
-      return {
-        orderAssignments: {
-          ...state.orderAssignments,
-          [orderId]: {
-            ...state.orderAssignments[orderId],
-            ...updateData
-          }
-        }
-      };
-    }),
-  
-  // Clear assignment data without affecting other store state
-  clearDeliveryAssignmentData: () => set({
+  // Clear assignment data after completion
+  clearAssignmentData: () => set({
     locationToDeliverFrom: null,
-    selectedDeliveryPerson: null
+    assignedDeliveryPersonnel: {}
   }),
 }));
 
