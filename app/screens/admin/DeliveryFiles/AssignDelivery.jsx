@@ -1,285 +1,271 @@
 import {
-  ScrollView,
+  FlatList,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
-  Image,
-  ActivityIndicator,
-  FlatList,
-  SafeAreaView
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator
 } from "react-native";
 import React, { useEffect, useState } from "react";
-import { useRoute } from "@react-navigation/native";
+import DeliveryPersonelLayout from "./DeliveryPersonelLayout";
+import DriverCard from "./DriverCard";
 import { useNavigation } from "@react-navigation/native";
 
-//zustand
+// Firebase
+import { FIREBASE_DB } from "../../../../FirebaseConfig";
+import { doc, updateDoc } from "firebase/firestore";
+
+// Util function
+import { sortDeliveryPersonsByDistance } from "../../../../utils/MapUtilFunctions";
+
+// Zustand
 import useStore from "../../../../utils/useStore";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-//import components
-import MapsSearchBar from "../../shared/MapsSearchBar";
-import Map from "../../shared/Map";
-
-//import icons
-import Ionicons from "@expo/vector-icons/Ionicons";
-import AntDesign from "@expo/vector-icons/AntDesign";
-
-const AssignDelivery = () => {
-  const deliveryPersons = useStore((state) => state.deliveryPersons);
-  console.log("deliveryPersons", deliveryPersons);
-
-  //navigation
+const ConfirmDeliveryPersonel = () => {
   const navigation = useNavigation();
-  const route = useRoute();
-  const item = useStore((state) => state.orderSelected);
-  // const orderSelected = useStore((state) => state.orderSelected);
-  const orderSelected = useStore((state) => state.ordersStored[0]);
-  console.log("order selected", orderSelected);
+  const [isLoading, setIsLoading] = useState(false);
 
-  //get orders stored from zustand
-  const ordersStored = useStore((state) => state.ordersStored);
+  // Get data from store using your existing structure
+  const deliveryPersons = useStore((state) => state.deliveryPersons);
+  const locationToDeliverFrom = useStore((state) => state.locationToDeliverFrom);
+  const orderSelected = useStore((state) => state.orderSelected);
+  const storeLocation = useStore((state) => state.storeLocation);
+  const deliveryFees = useStore((state) => state.deliveryFees || 150); // Use default if not set
 
-  //order details
-  const destinationLatitude = orderSelected?.customerInfo?.position?.lat;
-  const destinationLongitude = orderSelected?.customerInfo?.position?.lng;
-  const destinationAdress = orderSelected?.customerInfo?.address;
-  const formatTimestamp = ({ seconds, nanoseconds }) => {
-    const date = new Date(seconds * 1000 + nanoseconds / 1e6);
-    // e.g. "12 August 2024"
-    const options = { day: "numeric", month: "long", year: "numeric" };
-    const formattedDate = date.toLocaleDateString("en-US", options);
-
-    // calculate how many days ago
-    const now = Date.now();
-    const diffMs = now - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const ago = diffDays <= 1 ? `${diffDays} day ago` : `${diffDays} days ago`;
-
-    return { formattedDate, ago };
+  // Create location object for sorting
+  const location = {
+    latitude:
+      locationToDeliverFrom?.coords?.latitude ||
+      locationToDeliverFrom?.position?.lat ||
+      storeLocation?.position?.lat ||
+      0,
+    longitude:
+      locationToDeliverFrom?.coords?.longitude ||
+      locationToDeliverFrom?.position?.lng ||
+      storeLocation?.position?.lng ||
+      0,
   };
-  const addedAt = orderSelected?.createdAt;
-  const { formattedDate, ago } = formatTimestamp(addedAt);
 
-  console.log("ordersStored", ordersStored[0]);
+  useEffect(() => {
+    console.log("locationToDeliverFrom confirm", location);
+  }, [locationToDeliverFrom]);
 
-  //details set on this page
-  const setLocationToDeliverFrom = useStore(
-    (state) => state.setLocationToDeliverFrom
+  // Sort delivery personnel by distance from the delivery starting point
+  const orderedSortedDeliveryPersonel = sortDeliveryPersonsByDistance(
+    deliveryPersons,
+    location
   );
+
+  const [selected, setSelected] = useState(null);
+  const [selectedDriver, setSelectedDriver] = useState(null);
+
+  // Handle driver selection
+  const handleDriverSelection = (driver) => {
+    setSelected(driver.id);
+    setSelectedDriver(driver);
+  };
+
+  // Assign order to delivery personnel
+  const assignOrderToDriver = async () => {
+    if (!selected || !selectedDriver) {
+      Alert.alert("Error", "Please select a delivery person first");
+      return;
+    }
+
+    if (!orderSelected?.id) {
+      Alert.alert("Error", "No order selected");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const orderRef = doc(FIREBASE_DB, "orders", orderSelected.id);
+      await updateDoc(orderRef, {
+        status: "processing",
+        deliveryPersonnelId: selectedDriver.id,
+        assignedAt: new Date(),
+        // Store additional assignment details
+        deliveryAssignment: {
+          driverId: selectedDriver.id,
+          driverName: selectedDriver.name || "Delivery Driver",
+          assignedAt: new Date(),
+          pickupLocation: locationToDeliverFrom?.address || storeLocation?.address || "Store Location",
+          deliveryLocation: orderSelected?.customerInfo?.address || "Customer Address"
+        }
+      });
+
+      Alert.alert(
+        "Success", 
+        `Order has been assigned to ${selectedDriver.name || "the selected driver"}`,
+        [
+          { 
+            text: "OK", 
+            onPress: () => navigation.navigate("Deliveries") 
+          }
+        ]
+      );
+    } catch (error) {
+      console.error("Error assigning order:", error);
+      Alert.alert("Error", "Failed to assign order. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      <>
-        {!destinationLatitude && item ? (
-          <View
-            style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-          >
-            <Text style={{ marginBottom: 10 }}>
-              Waiting for delivery location...
-            </Text>
-            <ActivityIndicator size="large" color="#0000ff" />
+      <DeliveryPersonelLayout
+        title="Confirm Delivery Personnel"
+        snapPoints={["30%", "40%", "65%", "85%"]}
+      >
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4a6da7" />
+            <Text style={styles.loadingText}>Assigning order...</Text>
           </View>
         ) : (
           <FlatList
-            data={[1]}
-            style={styles.container}
+            data={orderedSortedDeliveryPersonel}
             keyboardShouldPersistTaps="handled"
-            renderItem={() => (
-              <>
-                <View style={styles.headerContainer}>
-                  <Text style={styles.title}>Assign Delivery Person</Text>
-                  <TouchableOpacity
-                    style={styles.iconContainer}
-                    onPress={() => {
-                      navigation.navigate("Deliveries");
-                    }}
-                  >
-                    <Ionicons name="arrow-back" size={24} color="black" />
-                  </TouchableOpacity>
-                </View>
-
-                <MapsSearchBar
-                  stylesPasses={styles.locationInput}
-                  placeholderText="Enter location to deliver from"
-                  onSelectFunction={(data, details) => {
-                    setLocationToDeliverFrom({
-                      address: data.description,
-                      position: details.geometry.location,
-                    });
-                    console.log("set", {
-                      address: data.description,
-                      position: details.geometry.location,
-                    });
-                    navigation.navigate("FindDeliveryPersonel", {
-                      address: data.description,
-                      position: details.geometry.location,
-                    });
-                  }}
-                />
-                <View style={styles.currentLocationContainer}>
-                  <Text style={styles.currentLocationText}>
-                    Your current location
-                  </Text>
-                  <View style={styles.mapViewContainer}>
-                    <Map />
-                  </View>
-                </View>
-              </>
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <DriverCard
+                selected={selected}
+                item={item}
+                setSelected={() => handleDriverSelection(item)}
+              />
             )}
-            ListFooterComponent={() => (
-              <>
-                <View style={styles.orderDetailsContainer}>
-                  <Text style={styles.currentLocationText}>Order Details</Text>
-                  <View style={styles.orderDetailsCard}>
-                    <View style={styles.firstRow}>
-                      <Image
-                        source={{
-                          uri: `https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=600&height=400&center=lonlat:${destinationLongitude},${destinationLatitude}&zoom=14&apiKey=${process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY}`,
-                        }}
-                        style={styles.tinyMap}
-                      />
-                      <View style={styles.descriptionContainer}>
-                        <View style={styles.descriptionTextContainer}>
-                          <AntDesign name="user" size={24} color="black" />
-                          <Text>{orderSelected?.customerInfo?.name}</Text>
-                        </View>
-                        <View style={styles.descriptionTextContainer}>
-                          <Ionicons
-                            name="location-outline"
-                            size={24}
-                            color="black"
-                          />
-                          <Text>{destinationAdress}</Text>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={styles.secondRow}>
-                      <View style={styles.secondRowDetails}>
-                        <Text style={styles.secondRowText}>Order Date</Text>
-                        <Text style={styles.secondRowText}>
-                          {formattedDate}, {ago}
-                        </Text>
-                      </View>
-                      <View style={styles.secondRowDetails}>
-                        <Text style={styles.secondRowText}>Order Number</Text>
-                        <Text style={styles.secondRowText}>
-                          {orderSelected?.orderNumber}
-                        </Text>
-                      </View>
-                      <View style={styles.secondRowDetails}>
-                        <Text style={styles.secondRowText}>Delivery Fee</Text>
-                        <Text style={styles.secondRowText}>
-                          ksh {orderSelected?.deliveryFee}
-                        </Text>
-                      </View>
-
-                      <View style={styles.secondRowDetails}>
-                        <Text style={styles.secondRowText}>Total</Text>
-                        <Text style={styles.secondRowText}>
-                          {orderSelected?.total}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No delivery personnel available</Text>
+                <Text style={styles.emptySubtext}>Please try again later</Text>
+              </View>
+            }
+            ListHeaderComponent={
+              <View style={styles.headerContainer}>
+                <Text style={styles.headerTitle}>Select Delivery Personnel</Text>
+                <Text style={styles.headerSubtitle}>
+                  Assign order #{orderSelected?.orderNumber || (orderSelected?.id ? orderSelected.id.slice(-5).toUpperCase() : 'N/A')}
+                </Text>
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationLabel}>Pickup from:</Text>
+                  <Text style={styles.locationText}>
+                    {locationToDeliverFrom?.address || storeLocation?.address || "Default Store Location"}
+                  </Text>
                 </View>
-              </>
+                <View style={styles.divider} />
+              </View>
+            }
+            ListFooterComponent={() => (
+              <View style={styles.footerContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.confirmButton,
+                    !selected && styles.disabledButton
+                  ]}
+                  disabled={!selected}
+                  onPress={assignOrderToDriver}
+                >
+                  <Text style={styles.confirmButtonText}>
+                    Confirm Assignment
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
           />
         )}
-      </>
+      </DeliveryPersonelLayout>
     </SafeAreaView>
   );
 };
 
-export default AssignDelivery;
+export default ConfirmDeliveryPersonel;
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
-    padding: 20,
-    paddingBottom: 50,
-    backgroundColor: "#FBF9FD",
-  },
-  headerContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-  iconContainer: {
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderRadius: 50,
-    width: 40,
-    height: 40,
+    padding: 20
   },
-
-  locationInput: {
-    boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px",
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  currentLocationContainer: {
-    marginTop: 30,
-  },
-  currentLocationText: {
-    fontSize: 20,
-  },
-  mapViewContainer: {
-    width: "100%",
-    height: 300,
-    marginTop: 20,
-    backgroundColor: "#ffffff",
-    boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px",
-  },
-  orderDetailsContainer: {
-    marginTop: 20,
-  },
-  orderDetailsCard: {
-    width: "100%",
-    backgroundColor: "#ffffff",
-    boxShadow: "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px",
-    borderRadius: 10,
-    marginTop: 20,
-    padding: 10,
-  },
-  firstRow: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
-  tinyMap: {
-    width: 80,
-    height: 90,
-    borderRadius: 10,
-  },
-  descriptionContainer: {
-    gap: 10,
-  },
-  descriptionTextContainer: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
-  secondRow: {
-    marginTop: 20,
-    backgroundColor: "#FBF9FD",
-    width: "100%",
-    borderRadius: 10,
-    padding: 10,
-    gap: 15,
-    paddingBottom: 30,
-  },
-  secondRowDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  secondRowText: {
-    color: "#7F7E81",
+  loadingText: {
+    marginTop: 10,
     fontSize: 16,
+    color: "#666"
   },
+  headerContainer: {
+    marginBottom: 15
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 5
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 15
+  },
+  locationInfo: {
+    backgroundColor: "#f5f5f5",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10
+  },
+  locationLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 4
+  },
+  locationText: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "500"
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#eeeeee",
+    marginVertical: 10
+  },
+  emptyContainer: {
+    padding: 30,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#666",
+    marginTop: 10
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 5,
+    textAlign: "center"
+  },
+  footerContainer: {
+    marginTop: 20
+  },
+  confirmButton: {
+    backgroundColor: "#4a6da7",
+    padding: 15,
+    borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20
+  },
+  disabledButton: {
+    backgroundColor: "#b0bec5",
+    opacity: 0.7
+  },
+  confirmButtonText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 16
+  }
 });
