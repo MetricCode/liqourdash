@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import { FIREBASE_AUTH, FIREBASE_DB } from '../../FirebaseConfig';
 import { 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword 
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import {
@@ -18,6 +19,7 @@ import {
   SafeAreaView,
   Alert,
   ScrollView,
+  Image,
 } from 'react-native';
 
 const Login = () => {
@@ -26,6 +28,46 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
   const auth = FIREBASE_AUTH;
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert(
+        'Password Reset Email Sent',
+        `A password reset link has been sent to ${email}. Please check your inbox.`,
+        [
+          { text: 'OK', onPress: () => console.log('OK Pressed') }
+        ]
+      );
+    } catch (error: any) {
+      let errorMessage = 'Failed to send password reset email. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection.';
+          break;
+        default:
+          console.error('Password reset error:', error);
+      }
+      
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const handleAuthentication = async () => {
     if (!email || !password) {
@@ -64,6 +106,7 @@ const Login = () => {
           break;
         case 'auth/user-not-found':
         case 'auth/wrong-password':
+        case 'auth/invalid-credential':  // Add this case
           errorMessage = 'Invalid email or password';
           break;
         case 'auth/email-already-in-use':
@@ -77,6 +120,7 @@ const Login = () => {
           break;
         default:
           console.error('Authentication error:', error);
+          errorMessage = 'Authentication failed. Please try again.';
       }
       
       Alert.alert('Error', errorMessage);
@@ -102,6 +146,13 @@ const Login = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
           <View style={styles.headerContainer}>
             <Text style={styles.headerText}>
               {isLogin ? 'Welcome Back' : 'Create Account'}
@@ -137,7 +188,8 @@ const Login = () => {
             {isLogin ? (
               <TouchableOpacity 
                 style={styles.forgotPasswordContainer}
-                onPress={() => Alert.alert('Info', 'Password reset functionality would go here')}
+                onPress={handleForgotPassword}  // Changed from the Alert to our new function
+                disabled={loading}
               >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
@@ -263,6 +315,14 @@ const styles = StyleSheet.create({
   switchModeText: {
     color: '#4a6da7',
     fontSize: 14,
+  },
+  logoContainer: {
+  alignItems: 'center',
+  marginBottom: 20,
+  },
+  logo: {
+    width: 400,  // Adjust as needed
+    height: 70, // Adjust as needed
   },
 });
 

@@ -73,7 +73,6 @@ const DeliveryHistory = ({ navigation }: { navigation: NavigationProp<any> }) =>
   const fetchDeliveryHistory = useCallback(async () => {
     setLoading(true);
     try {
-      // Get the current user ID
       const userId = FIREBASE_AUTH.currentUser?.uid;
       if (!userId) throw new Error('User not authenticated');
 
@@ -84,72 +83,62 @@ const DeliveryHistory = ({ navigation }: { navigation: NavigationProp<any> }) =>
       } else if (timeFilter === 'month') {
         startDate.setMonth(startDate.getMonth() - 1);
       } else {
-        // If 'all', set to a very old date
         startDate = new Date(2000, 0, 1);
       }
 
-      // Here you would fetch delivery history
-      // This is a placeholder for your actual implementation
+      // Query orders in two steps to avoid composite index requirement
+      const ordersRef = collection(FIREBASE_DB, 'orders');
       
-      /*
-      const historyRef = collection(FIREBASE_DB, 'delivery_history');
-      const historyQuery = query(
-        historyRef,
-        where('driverId', '==', userId),
-        where('completedDate', '>=', startDate),
-        orderBy('completedDate', 'desc')
+      // First filter by status only
+      const statusQuery = query(
+        ordersRef,
+        where('status', '==', `assigned to ${userId}`)
       );
       
-      const snapshot = await getDocs(historyQuery);
+      const snapshot = await getDocs(statusQuery);
       const historyData: DeliveryRecord[] = [];
-      
+      const deliveryDays = new Set<string>();
+
+      // Then filter by date in memory
       snapshot.forEach(doc => {
         const data = doc.data();
-        historyData.push({
-          id: doc.id,
-          date: data.completedDate ? new Date(data.completedDate.toDate()).toLocaleDateString() : 'Unknown',
-          orders: data.orderCount || 0,
-          totalRevenue: data.totalAmount || 0,
-          status: data.status || 'completed',
-          areas: data.areas || [],
-          distance: data.totalDistance || 0
-        });
+        const assignedDate = data.assignedAt?.toDate();
+        
+        // Skip if no assigned date or outside time filter
+        if (!assignedDate || assignedDate < startDate) return;
+
+        const dateKey = assignedDate.toLocaleDateString();
+        deliveryDays.add(dateKey);
+
+        // Rest of your aggregation logic...
+        const existingDayIndex = historyData.findIndex(item => item.date === dateKey);
+        
+        if (existingDayIndex >= 0) {
+          const existing = historyData[existingDayIndex];
+          historyData[existingDayIndex] = {
+            ...existing,
+            orders: existing.orders + 1,
+            totalRevenue: existing.totalRevenue + (data.total || 0),
+            areas: [...new Set([...existing.areas, ...(data.deliveryAreas || [])])],
+            distance: existing.distance + (data.distance || 0)
+          };
+        } else {
+          historyData.push({
+            id: doc.id,
+            date: dateKey,
+            orders: 1,
+            totalRevenue: data.total || 0,
+            status: 'completed',
+            areas: data.deliveryAreas || [],
+            distance: data.distance || 0
+          });
+        }
       });
+
+      // Sort by date descending
+      historyData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
       setDeliveryHistory(historyData);
-      */
-      
-      // For demo, set mock data
-      setDeliveryHistory([
-        {
-          id: '1',
-          date: 'May 4, 2025',
-          orders: 8,
-          totalRevenue: 245.50,
-          status: 'completed',
-          areas: ['Downtown', 'River Heights'],
-          distance: 12.3
-        },
-        {
-          id: '2',
-          date: 'May 3, 2025',
-          orders: 6,
-          totalRevenue: 187.25,
-          status: 'completed',
-          areas: ['West End', 'University'],
-          distance: 9.8
-        },
-        {
-          id: '3',
-          date: 'May 1, 2025',
-          orders: 9,
-          totalRevenue: 312.75,
-          status: 'completed',
-          areas: ['North Side', 'Central Park'],
-          distance: 14.5
-        }
-      ]);
-      
       setLoading(false);
     } catch (error) {
       console.error('Error fetching delivery history:', error);
@@ -179,12 +168,14 @@ const DeliveryHistory = ({ navigation }: { navigation: NavigationProp<any> }) =>
 
   // Calculate summary statistics
   const getSummaryStats = () => {
+    // Calculate from the actual deliveryHistory state
+    const totalDeliveries = deliveryHistory.length;
     const totalOrders = deliveryHistory.reduce((sum, record) => sum + record.orders, 0);
     const totalRevenue = deliveryHistory.reduce((sum, record) => sum + record.totalRevenue, 0);
     const totalDistance = deliveryHistory.reduce((sum, record) => sum + record.distance, 0);
     
     return {
-      deliveries: deliveryHistory.length,
+      deliveries: totalDeliveries,
       orders: totalOrders,
       revenue: totalRevenue,
       distance: totalDistance.toFixed(1)
@@ -264,142 +255,135 @@ const DeliveryHistory = ({ navigation }: { navigation: NavigationProp<any> }) =>
           <ActivityIndicator size="large" color="#4a6da7" />
           <Text style={styles.loadingText}>Loading delivery history...</Text>
         </View>
+      ) : deliveryHistory.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="time-outline" size={80} color="#ddd" />
+          <Text style={styles.emptyText}>No delivery history found</Text>
+          <Text style={styles.emptySubtext}>
+            {timeFilter === 'week' 
+              ? "You haven't completed any deliveries this week" 
+              : timeFilter === 'month' 
+                ? "You haven't completed any deliveries this month" 
+                : "You haven't completed any deliveries yet"}
+          </Text>
+        </View>
       ) : (
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={{ padding: 20, paddingBottom: 30 }}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#4a6da7']}
-              tintColor="#4a6da7"
-              title="Refreshing history..."
-              titleColor="#666"
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          {deliveryHistory.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="time-outline" size={80} color="#ddd" />
-              <Text style={styles.emptyText}>No delivery history</Text>
-              <Text style={styles.emptySubtext}>
-                Completed deliveries will appear here
-              </Text>
+          <Animated.View 
+            style={[
+              styles.summarySection,
+              { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }
+            ]}
+          >
+            <Text style={styles.sectionTitle}>Summary</Text>
+            <View style={styles.summaryGrid}>
+              <View style={[styles.summaryCard, { backgroundColor: '#e8f5e9' }]}>
+                <Text style={styles.summaryValue}>{summary.deliveries}</Text>
+                <Text style={styles.summaryLabel}>Deliveries</Text>
+                <Ionicons name="calendar-outline" size={24} color="#388e3c" style={styles.summaryIcon} />
+              </View>
+              
+              <View style={[styles.summaryCard, { backgroundColor: '#e3f2fd' }]}>
+                <Text style={styles.summaryValue}>{summary.orders}</Text>
+                <Text style={styles.summaryLabel}>Orders</Text>
+                <Ionicons name="cube-outline" size={24} color="#1976d2" style={styles.summaryIcon} />
+              </View>
+              
+              <View style={[styles.summaryCard, { backgroundColor: '#fff3e0' }]}>
+                <Text style={styles.summaryValue}>{formatCurrency(summary.revenue)}</Text>
+                <Text style={styles.summaryLabel}>Revenue</Text>
+                <Ionicons name="cash-outline" size={24} color="#f57c00" style={styles.summaryIcon} />
+              </View>
+              
+              <View style={[styles.summaryCard, { backgroundColor: '#f3e5f5' }]}>
+                <Text style={styles.summaryValue}>{summary.distance} mi</Text>
+                <Text style={styles.summaryLabel}>Distance</Text>
+                <Ionicons name="speedometer-outline" size={24} color="#9c27b0" style={styles.summaryIcon} />
+              </View>
             </View>
-          ) : (
-            <>
-              <Animated.View 
-                style={[
-                  styles.summarySection,
-                  { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }
-                ]}
-              >
-                <Text style={styles.sectionTitle}>Summary</Text>
-                <View style={styles.summaryGrid}>
-                  <View style={[styles.summaryCard, { backgroundColor: '#e8f5e9' }]}>
-                    <Text style={styles.summaryValue}>{summary.deliveries}</Text>
-                    <Text style={styles.summaryLabel}>Deliveries</Text>
-                    <Ionicons name="calendar-outline" size={24} color="#388e3c" style={styles.summaryIcon} />
-                  </View>
-                  
-                  <View style={[styles.summaryCard, { backgroundColor: '#e3f2fd' }]}>
-                    <Text style={styles.summaryValue}>{summary.orders}</Text>
-                    <Text style={styles.summaryLabel}>Orders</Text>
-                    <Ionicons name="cube-outline" size={24} color="#1976d2" style={styles.summaryIcon} />
-                  </View>
-                  
-                  <View style={[styles.summaryCard, { backgroundColor: '#fff3e0' }]}>
-                    <Text style={styles.summaryValue}>{formatCurrency(summary.revenue)}</Text>
-                    <Text style={styles.summaryLabel}>Revenue</Text>
-                    <Ionicons name="cash-outline" size={24} color="#f57c00" style={styles.summaryIcon} />
-                  </View>
-                  
-                  <View style={[styles.summaryCard, { backgroundColor: '#f3e5f5' }]}>
-                    <Text style={styles.summaryValue}>{summary.distance} mi</Text>
-                    <Text style={styles.summaryLabel}>Distance</Text>
-                    <Ionicons name="speedometer-outline" size={24} color="#9c27b0" style={styles.summaryIcon} />
-                  </View>
-                </View>
-              </Animated.View>
-              
-              <Text style={styles.sectionTitle}>Delivery History</Text>
-              
-              {deliveryHistory.map((record, index) => (
-                <Animated.View
-                  key={record.id}
+          </Animated.View>
+          
+          <Text style={styles.sectionTitle}>Delivery History</Text>
+          
+          {deliveryHistory.map((record, index) => (
+            <Animated.View
+              key={record.id}
+              style={[
+                styles.historyCard,
+                { 
+                  opacity: fadeAnim,
+                  transform: [{ scale: scaleAnim }],
+                  marginBottom: index === deliveryHistory.length - 1 ? 20 : 15
+                }
+              ]}
+            >
+              <View style={styles.historyCardHeader}>
+                <Text style={styles.historyDate}>{record.date}</Text>
+                <View 
                   style={[
-                    styles.historyCard,
+                    styles.historyStatus,
                     { 
-                      opacity: fadeAnim,
-                      transform: [{ scale: scaleAnim }],
-                      marginBottom: index === deliveryHistory.length - 1 ? 20 : 15
+                      backgroundColor: record.status === 'completed' ? '#e8f5e9' : 
+                                      record.status === 'partial' ? '#fff3e0' : '#ffebee'
                     }
                   ]}
                 >
-                  <View style={styles.historyCardHeader}>
-                    <Text style={styles.historyDate}>{record.date}</Text>
-                    <View 
-                      style={[
-                        styles.historyStatus,
-                        { 
-                          backgroundColor: record.status === 'completed' ? '#e8f5e9' : 
-                                          record.status === 'partial' ? '#fff3e0' : '#ffebee'
-                        }
-                      ]}
-                    >
-                      <Text 
-                        style={[
-                          styles.historyStatusText,
-                          { 
-                            color: record.status === 'completed' ? '#388e3c' : 
-                                  record.status === 'partial' ? '#f57c00' : '#d32f2f'
-                          }
-                        ]}
-                      >
-                        {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.historyDetails}>
-                    <View style={styles.historyDetailItem}>
-                      <Ionicons name="cube" size={20} color="#666" />
-                      <Text style={styles.historyDetailText}>{record.orders} Orders</Text>
-                    </View>
-                    
-                    <View style={styles.historyDetailItem}>
-                      <Ionicons name="cash" size={20} color="#666" />
-                      <Text style={styles.historyDetailText}>{formatCurrency(record.totalRevenue)}</Text>
-                    </View>
-                    
-                    <View style={styles.historyDetailItem}>
-                      <Ionicons name="speedometer" size={20} color="#666" />
-                      <Text style={styles.historyDetailText}>{record.distance} mi</Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.areasContainer}>
-                    <Text style={styles.areasLabel}>Delivery Areas:</Text>
-                    <View style={styles.areasList}>
-                      {record.areas.map((area, idx) => (
-                        <View key={idx} style={styles.areaTag}>
-                          <Text style={styles.areaTagText}>{area}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                  
-                  <TouchableOpacity 
-                    style={styles.viewButton}
-                    onPress={() => navigation.navigate('HistoryDetails', { recordId: record.id })}
+                  <Text 
+                    style={[
+                      styles.historyStatusText,
+                      { 
+                        color: record.status === 'completed' ? '#388e3c' : 
+                              record.status === 'partial' ? '#f57c00' : '#d32f2f'
+                      }
+                    ]}
                   >
-                    <Text style={styles.viewButtonText}>View Details</Text>
-                    <Ionicons name="chevron-forward" size={16} color="#4a6da7" />
-                  </TouchableOpacity>
-                </Animated.View>
-              ))}
-            </>
-          )}
+                    {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.historyDetails}>
+                <View style={styles.historyDetailItem}>
+                  <Ionicons name="cube" size={20} color="#666" />
+                  <Text style={styles.historyDetailText}>{record.orders} Orders</Text>
+                </View>
+                
+                <View style={styles.historyDetailItem}>
+                  <Ionicons name="cash" size={20} color="#666" />
+                  <Text style={styles.historyDetailText}>{formatCurrency(record.totalRevenue)}</Text>
+                </View>
+                
+                <View style={styles.historyDetailItem}>
+                  <Ionicons name="speedometer" size={20} color="#666" />
+                  <Text style={styles.historyDetailText}>{record.distance} mi</Text>
+                </View>
+              </View>
+              
+              <View style={styles.areasContainer}>
+                <Text style={styles.areasLabel}>Delivery Areas:</Text>
+                <View style={styles.areasList}>
+                  {record.areas.map((area, idx) => (
+                    <View key={idx} style={styles.areaTag}>
+                      <Text style={styles.areaTagText}>{area}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.viewButton}
+                onPress={() => navigation.navigate('HistoryDetails', { recordId: record.id })}
+              >
+                <Text style={styles.viewButtonText}>View Details</Text>
+                <Ionicons name="chevron-forward" size={16} color="#4a6da7" />
+              </TouchableOpacity>
+            </Animated.View>
+          ))}
         </ScrollView>
       )}
     </SafeAreaView>
