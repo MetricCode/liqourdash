@@ -116,6 +116,7 @@ const CustomerProfile = () => {
 
   // Handle saving profile
   const handleSaveProfile = async () => {
+    
     if (!user) return;
 
     if (!userProfile.name.trim()) {
@@ -245,221 +246,240 @@ const CustomerProfile = () => {
           </TouchableOpacity>
         )}
       </View>
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#4a6da7"]}
-            tintColor={"#4a6da7"}
-            title="Refreshing profile..."
-            titleColor="#666"
-          />
-        }
-      >
-        <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {userProfile.name.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <Text style={styles.userName}>{userProfile.name}</Text>
-            <Text style={styles.userEmail}>{userProfile.email}</Text>
-          </View>
+     
+      <FlatList
+       data={["1"]}
+       showsVerticalScrollIndicator={false}
+       keyboardShouldPersistTaps="handled"
+       contentContainerStyle={styles.content}
+       refreshControl={
+         <RefreshControl
+           refreshing={refreshing}
+           onRefresh={onRefresh}
+           colors={["#4a6da7"]}
+           tintColor={"#4a6da7"}
+           title="Refreshing profile..."
+           titleColor="#666"
+         />
+       }
+       renderItem={() => (
+         <>
+           <View style={styles.profileSection}>
+             <View style={styles.avatarContainer}>
+               <View style={styles.avatar}>
+                 <Text style={styles.avatarText}>
+                   {userProfile.name.charAt(0).toUpperCase()}
+                 </Text>
+               </View>
+               <Text style={styles.userName}>{userProfile.name}</Text>
+               <Text style={styles.userEmail}>{userProfile.email}</Text>
+             </View>
 
-          <View style={styles.divider} />
+             <View style={styles.divider} />
 
-          {editMode ? (
-            <View style={styles.formContainer}>
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Full Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={userProfile.name}
-                  onChangeText={(text) =>
-                    setUserProfile({ ...userProfile, name: text })
-                  }
-                  placeholder="Enter your name"
-                />
-              </View>
+             {editMode ? (
+               <View style={styles.formContainer}>
+                 <View style={styles.formField}>
+                   <Text style={styles.fieldLabel}>Full Name</Text>
+                   <TextInput
+                     style={styles.input}
+                     value={userProfile.name}
+                     onChangeText={(text) =>
+                       setUserProfile({ ...userProfile, name: text })
+                     }
+                     placeholder="Enter your name"
+                   />
+                 </View>
 
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Phone Number</Text>
-                <TextInput
-                  style={styles.input}
-                  value={userProfile.phone}
-                  onChangeText={(text) =>
-                    setUserProfile({ ...userProfile, phone: text })
-                  }
-                  placeholder="Enter your phone number"
-                  keyboardType="phone-pad"
-                />
-              </View>
+                 <View style={styles.formField}>
+                   <Text style={styles.fieldLabel}>Phone Number</Text>
+                   <TextInput
+                     style={styles.input}
+                     value={userProfile.phone}
+                     onChangeText={(text) =>
+                       setUserProfile({ ...userProfile, phone: text })
+                     }
+                     placeholder="Enter your phone number"
+                     keyboardType="phone-pad"
+                   />
+                 </View>
 
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Delivery Address</Text>
-                <MapsSearchBar
-                  stylesPasses={[styles.input, styles.addressInput]}
-                  placeholderText={false}
-                  onSelectFunction={(data, details) => {
-                    setUserProfile({
-                      ...userProfile,
-                      address: data.description,
-                      position: details.geometry.location,
-                    });
-                  }}
-                />
-              </View>
+                 <View style={styles.formField}>
+                   <Text style={styles.fieldLabel}>Delivery Address</Text>
+                   <MapsSearchBar
+                     stylesPasses={[styles.input, styles.addressInput]}
+                     placeholderText={false}
+                     onSelectFunction={(data, details) => {
+                       setUserProfile({
+                         ...userProfile,
+                         address: data.description,
+                         position: details.geometry.location,
+                       });
+                     }}
+                   />
+                 </View>
 
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setEditMode(false)}
-                  disabled={savingProfile}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
+                 <View style={styles.buttonRow}>
+                   <TouchableOpacity
+                     style={styles.cancelButton}
+                     onPress={() => setEditMode(false)}
+                     disabled={savingProfile}
+                   >
+                     <Text style={styles.cancelButtonText}>Cancel</Text>
+                   </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.saveButton,
-                    savingProfile && styles.disabledButton,
-                  ]}
-                  onPress={handleSaveProfile}
-                  disabled={savingProfile}
-                >
-                  {savingProfile ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Save Changes</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.infoContainer}>
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="call-outline" size={20} color="#4a6da7" />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Phone Number</Text>
-                  <Text style={styles.infoValue}>
-                    {userProfile.phone || "Not set"}
-                  </Text>
-                </View>
-              </View>
+                   <TouchableOpacity
+                     style={[
+                       styles.saveButton,
+                       savingProfile && styles.disabledButton,
+                     ]}
+                     onPress={handleSaveProfile}
+                     disabled={savingProfile}
+                   >
+                     {savingProfile ? (
+                       <ActivityIndicator size="small" color="white" />
+                     ) : (
+                       <Text style={styles.saveButtonText}>Save Changes</Text>
+                     )}
+                   </TouchableOpacity>
+                 </View>
+               </View>
+             ) : (
+               <View style={styles.infoContainer}>
+                 <View style={styles.infoRow}>
+                   <View style={styles.infoIcon}>
+                     <Ionicons name="call-outline" size={20} color="#4a6da7" />
+                   </View>
+                   <View style={styles.infoContent}>
+                     <Text style={styles.infoLabel}>Phone Number</Text>
+                     <Text style={styles.infoValue}>
+                       {userProfile.phone || "Not set"}
+                     </Text>
+                   </View>
+                 </View>
 
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="location-outline" size={20} color="#4a6da7" />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Delivery Address</Text>
-                  <Text style={styles.infoValue}>
-                    {userProfile.address || "Not set"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
+                 <View style={styles.infoRow}>
+                   <View style={styles.infoIcon}>
+                     <Ionicons
+                       name="location-outline"
+                       size={20}
+                       color="#4a6da7"
+                     />
+                   </View>
+                   <View style={styles.infoContent}>
+                     <Text style={styles.infoLabel}>Delivery Address</Text>
+                     <Text style={styles.infoValue}>
+                       {userProfile.address || "Not set"}
+                     </Text>
+                   </View>
+                 </View>
+               </View>
+             )}
+           </View>
 
-        <View style={styles.menuSection}>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => navigation.navigate("Orders" as never)}
-          >
-            <View style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}>
-              <Ionicons name="receipt-outline" size={22} color="#1976d2" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>My Orders</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
+           <View style={styles.menuSection}>
+             <TouchableOpacity
+               style={styles.menuItem}
+               onPress={() => navigation.navigate("Orders" as never)}
+             >
+               <View style={[styles.menuIcon, { backgroundColor: "#e3f2fd" }]}>
+                 <Ionicons name="receipt-outline" size={22} color="#1976d2" />
+               </View>
+               <View style={styles.menuContent}>
+                 <Text style={styles.menuText}>My Orders</Text>
+                 <Ionicons name="chevron-forward" size={20} color="#ccc" />
+               </View>
+             </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => navigation.navigate("Cart" as never)}
-          >
-            <View style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}>
-              <Ionicons name="cart-outline" size={22} color="#388e3c" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>My Cart</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
+             <TouchableOpacity
+               style={styles.menuItem}
+               onPress={() => navigation.navigate("Cart" as never)}
+             >
+               <View style={[styles.menuIcon, { backgroundColor: "#e8f5e9" }]}>
+                 <Ionicons name="cart-outline" size={22} color="#388e3c" />
+               </View>
+               <View style={styles.menuContent}>
+                 <Text style={styles.menuText}>My Cart</Text>
+                 <Ionicons name="chevron-forward" size={20} color="#ccc" />
+               </View>
+             </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => setPasswordModal(true)}
-          >
-            <View style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}>
-              <Ionicons name="lock-closed-outline" size={22} color="#f57c00" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>Change Password</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
+             <TouchableOpacity
+               style={styles.menuItem}
+               onPress={() => setPasswordModal(true)}
+             >
+               <View style={[styles.menuIcon, { backgroundColor: "#fff3e0" }]}>
+                 <Ionicons
+                   name="lock-closed-outline"
+                   size={22}
+                   color="#f57c00"
+                 />
+               </View>
+               <View style={styles.menuContent}>
+                 <Text style={styles.menuText}>Change Password</Text>
+                 <Ionicons name="chevron-forward" size={20} color="#ccc" />
+               </View>
+             </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              Alert.alert(
-                "Contact Support",
-                "Do you need help with your account?",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Call Support",
-                    onPress: () =>
-                      Alert.alert(
-                        "Support",
-                        "Customer support: +254-XXX-XXX-XXX"
-                      ),
-                  },
-                  {
-                    text: "Send Email",
-                    onPress: () =>
-                      Alert.alert("Email", "support@liquordash.com"),
-                  },
-                ]
-              );
-            }}
-          >
-            <View style={[styles.menuIcon, { backgroundColor: "#e1f5fe" }]}>
-              <Ionicons name="help-circle-outline" size={22} color="#0288d1" />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuText}>Help & Support</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
-        </View>
+             <TouchableOpacity
+               style={styles.menuItem}
+               onPress={() => {
+                 Alert.alert(
+                   "Contact Support",
+                   "Do you need help with your account?",
+                   [
+                     { text: "Cancel", style: "cancel" },
+                     {
+                       text: "Call Support",
+                       onPress: () =>
+                         Alert.alert(
+                           "Support",
+                           "Customer support: +254-XXX-XXX-XXX"
+                         ),
+                     },
+                     {
+                       text: "Send Email",
+                       onPress: () =>
+                         Alert.alert("Email", "support@liquordash.com"),
+                     },
+                   ]
+                 );
+               }}
+             >
+               <View style={[styles.menuIcon, { backgroundColor: "#e1f5fe" }]}>
+                 <Ionicons
+                   name="help-circle-outline"
+                   size={22}
+                   color="#0288d1"
+                 />
+               </View>
+               <View style={styles.menuContent}>
+                 <Text style={styles.menuText}>Help & Support</Text>
+                 <Ionicons name="chevron-forward" size={20} color="#ccc" />
+               </View>
+             </TouchableOpacity>
+           </View>
 
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={() => {
-            Alert.alert("Logout", "Are you sure you want to logout?", [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Logout",
-                style: "destructive",
-                onPress: handleLogout,
-              },
-            ]);
-          }}
-        >
-          <Ionicons name="log-out-outline" size={20} color="#f44336" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </ScrollView>
+           <TouchableOpacity
+             style={styles.logoutButton}
+             onPress={() => {
+               Alert.alert("Logout", "Are you sure you want to logout?", [
+                 { text: "Cancel", style: "cancel" },
+                 {
+                   text: "Logout",
+                   style: "destructive",
+                   onPress: handleLogout,
+                 },
+               ]);
+             }}
+           >
+             <Ionicons name="log-out-outline" size={20} color="#f44336" />
+             <Text style={styles.logoutText}>Logout</Text>
+           </TouchableOpacity>
+         </>
+       )}
+     ></FlatList>
+
 
       {/* Change Password Modal */}
       <Modal
