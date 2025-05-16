@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_AUTH, FIREBASE_DB } from '../../../FirebaseConfig';
-import { doc, getDoc,setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import {
   signOut,
   updateProfile,
@@ -26,6 +26,9 @@ import {
   updatePassword,
 } from 'firebase/auth';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
+import MapsSearchBar from "../shared/MapsSearchBar";
+import { KeyboardAvoidingView, Platform } from 'react-native';
+
 
 const DeliveryProfile = () => {
   const navigation = useNavigation();
@@ -45,6 +48,22 @@ const DeliveryProfile = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  
+  // Custom component to handle wrapping MapsSearchBar
+  const LocationSearchBar = ({ onSelect, placeholder }: { onSelect: (data: any, details: any) => void, placeholder: string }) => {
+    return (
+      <View>
+        <MapsSearchBar
+          stylesPasses={[styles.input, styles.addressInput]}
+          inputContainerStyle={styles.input}
+          placeholderText={placeholder}
+          onSelectFunction={onSelect}
+          Icon={Ionicons}
+          iconName="location-outline"
+        />
+      </View>
+    );
+  };
 
   // User profile state
   type UserProfile = {
@@ -54,10 +73,11 @@ const DeliveryProfile = () => {
     address: string;
     position: object;
     isAvailable: boolean;
-    currentOrders: any[]; // You can replace 'any' with a more specific type if you know the structure
+    currentOrders: any[];
     maxConcurrentOrders: number;
     joinDate: string;
     photoURL: string | null;
+    currentLocation: string;
   };
 
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -70,10 +90,11 @@ const DeliveryProfile = () => {
     currentOrders: [],          // New field for tracking active deliveries
     maxConcurrentOrders: 3,     // New field for order capacity
     joinDate: "N/A",            // Add joinDate to fix type error
-    photoURL: null              // Add photoURL for consistency
+    photoURL: null,
+    currentLocation: ""
   });
 
-  // Availability settings
+  // Availability settings - Fix: sync with userProfile
   const [isAvailable, setIsAvailable] = useState(false);
   const [maxConcurrentOrders, setMaxConcurrentOrders] = useState('3');
   
@@ -98,49 +119,61 @@ const DeliveryProfile = () => {
       const profileSnap = await getDoc(profileRef);
 
       if (!profileSnap.exists()) {
-      // Create new profile document with delivery-specific fields
-      await setDoc(profileRef, {
-        name: user.displayName || "",
-        email: user.email || "",
-        phone: "",
-        address: "",
-        position: {},
-        isAvailable: false,
-        currentOrders: [],
-        maxConcurrentOrders: 3,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        role: "delivery" // Add role identification
-      });
-      
-      setUserProfile({
-        name: user.displayName || "",
-        email: user.email || "",
-        phone: "",
-        address: "",
-        position: {},
-        isAvailable: false,
-        currentOrders: [],
-        maxConcurrentOrders: 3,
-        joinDate: "N/A",
-        photoURL: null
-      });
+        await setDoc(profileRef, {
+          name: user.displayName || "",
+          email: user.email || "",
+          phone: "",
+          address: "",
+          position: {},
+          isAvailable: false,
+          currentOrders: [],
+          maxConcurrentOrders: 3,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          role: "delivery"
+        });
+        
+        setUserProfile({
+          name: user.displayName || "",
+          email: user.email || "",
+          phone: "",
+          address: "",
+          position: {},
+          isAvailable: false,
+          currentOrders: [],
+          maxConcurrentOrders: 3,
+          joinDate: "N/A",
+          photoURL: null,
+          currentLocation: ""
+        });
+        
+        // Sync availability settings
+        setIsAvailable(false);
+        setMaxConcurrentOrders('3');
       } else {
         const data = profileSnap.data();
+        const isUserAvailable = typeof data.isAvailable === "boolean" ? data.isAvailable : false;
+        const userMaxOrders = typeof data.maxConcurrentOrders === "number" ? data.maxConcurrentOrders : 3;
+        
         setUserProfile({
           name: user.displayName || data.name || "",
           email: user.email || data.email || "",
           phone: data.phone || "",
           address: data.address || "",
           position: data.position || {},
-          isAvailable: typeof data.isAvailable === "boolean" ? data.isAvailable : false,
+          isAvailable: isUserAvailable,
           currentOrders: Array.isArray(data.currentOrders) ? data.currentOrders : [],
-          maxConcurrentOrders: typeof data.maxConcurrentOrders === "number" ? data.maxConcurrentOrders : 3,
+          maxConcurrentOrders: userMaxOrders,
           joinDate: data.createdAt
             ? new Date(data.createdAt.seconds * 1000).toLocaleDateString()
             : "N/A",
-          photoURL: data.photoURL || null
+          photoURL: data.photoURL || null,
+          currentLocation: data.address || ""
         });
+        
+        // Sync availability settings - Fix: sync with userProfile
+        setIsAvailable(isUserAvailable);
+        setMaxConcurrentOrders(userMaxOrders.toString());
       }
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -208,24 +241,35 @@ const DeliveryProfile = () => {
     try {
       setSavingSettings(true);
 
-      // Parse max concurrent orders to a number
+      // Validate that location is provided if available
+      if (isAvailable && !userProfile.address?.trim()) {
+        Alert.alert("Error", "Please enter your current location when setting yourself as available");
+        return;
+      }
+
       const maxOrders = parseInt(maxConcurrentOrders, 10) || 3;
       
-      // Update both profile collections for consistency
+      const updateData = {
+        isAvailable: isAvailable,
+        maxConcurrentOrders: maxOrders,
+        lastUpdated: serverTimestamp(),
+        address: userProfile.address,
+        position: userProfile.position,
+      };
+
+      // Update both collections
       const userRef = doc(FIREBASE_DB, 'users', user.uid);
-      await updateDoc(userRef, {
-        isAvailable: isAvailable,
-        maxConcurrentOrders: maxOrders,
-        lastUpdated: serverTimestamp()
-      });
+      await updateDoc(userRef, updateData);
       
-      // Also update the shared userProfiles collection
       const profileRef = doc(FIREBASE_DB, "userProfiles", user.uid);
-      await updateDoc(profileRef, {
+      await updateDoc(profileRef, updateData);
+      
+      // Fix: Update local state to match what was saved to Firebase
+      setUserProfile(prev => ({
+        ...prev,
         isAvailable: isAvailable,
-        maxConcurrentOrders: maxOrders,
-        lastUpdated: serverTimestamp()
-      });
+        maxConcurrentOrders: maxOrders
+      }));
 
       Alert.alert('Success', 'Your availability settings have been updated');
     } catch (error) {
@@ -317,24 +361,30 @@ const DeliveryProfile = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9f9f9" />
-
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Profile</Text>
-        {!editMode && (
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => setEditMode(true)}
-          >
-            <Ionicons name="create-outline" size={22} color="#4a6da7" />
-            <Text style={styles.editButtonText}>Edit</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{flex: 1}}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+      >
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Profile</Text>
+          {/* Fix: Add Edit button to header */}
+          {!editMode ? (
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => setEditMode(true)}
+            >
+              <Ionicons name="create-outline" size={20} color="#4a6da7" />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
-        style={{ flex: 1 }} // Add this line
+        style={{ flex: 1 }}
+        nestedScrollEnabled={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -391,6 +441,21 @@ const DeliveryProfile = () => {
                 />
               </View>
 
+              {/* Fix: Add location field in edit mode */}
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Current Location</Text>
+                <LocationSearchBar 
+                  placeholder="Enter your current location"
+                  onSelect={(data: any, details: any) => {
+                    setUserProfile({
+                      ...userProfile,
+                      address: data.description,
+                      position: details.geometry.location,
+                    });
+                  }}
+                />
+              </View>
+
               <View style={styles.buttonRow}>
                 <TouchableOpacity
                   style={styles.cancelButton}
@@ -432,11 +497,47 @@ const DeliveryProfile = () => {
 
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
+                  <Ionicons name="location-outline" size={20} color="#4a6da7" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Current Location</Text>
+                  <Text style={styles.infoValue}>
+                    {userProfile.address || "Not set"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
                   <Ionicons name="calendar-outline" size={20} color="#4a6da7" />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Member Since</Text>
                   <Text style={styles.infoValue}>{userProfile.joinDate}</Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#4a6da7" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Availability Status</Text>
+                  <Text style={styles.infoValue}>
+                    {userProfile.isAvailable ? "Available" : "Not Available"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                  <Ionicons name="bicycle-outline" size={20} color="#4a6da7" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Order Capacity</Text>
+                  <Text style={styles.infoValue}>
+                    {userProfile.maxConcurrentOrders} concurrent orders
+                  </Text>
                 </View>
               </View>
             </View>
@@ -490,6 +591,23 @@ const DeliveryProfile = () => {
               ios_backgroundColor="#d1d1d1"
             />
           </View>
+
+          {/* Location input field */}
+          {isAvailable && (
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Current Location</Text>
+              <LocationSearchBar 
+                placeholder="Enter your current location"
+                onSelect={(data: any, details: any) => {
+                  setUserProfile({
+                    ...userProfile,
+                    address: data.description,
+                    position: details.geometry.location,
+                  });
+                }}
+              />
+            </View>
+          )}
           
           <View style={styles.settingRow}>
             <View style={styles.settingLabelContainer}>
@@ -513,7 +631,6 @@ const DeliveryProfile = () => {
                 style={styles.orderCountInput}
                 value={maxConcurrentOrders}
                 onChangeText={text => {
-                  // Allow only numbers
                   const numericValue = text.replace(/[^0-9]/g, '');
                   setMaxConcurrentOrders(numericValue);
                 }}
@@ -545,7 +662,7 @@ const DeliveryProfile = () => {
             )}
           </TouchableOpacity>
         </View>
-        
+          
         {/* Account Actions */}
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Routes' as never)}>
@@ -596,6 +713,7 @@ const DeliveryProfile = () => {
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Change Password Modal */}
       <Modal
@@ -678,7 +796,6 @@ const DeliveryProfile = () => {
   );
 };
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -696,7 +813,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between', // Fix: Changed from center to space-between
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
@@ -711,7 +828,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 14,
-    marginLeft: 12,
   },
   editButtonText: {
     color: '#4a6da7',
@@ -725,7 +841,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   content: {
-    flexGrow: 1, // Add this to allow content to expand
+    flexGrow: 1,
     padding: 20,
     paddingBottom: 40,
   },
@@ -733,6 +849,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     padding: 20,
     marginBottom: 16,
+    borderRadius: 12, // Fix: Added border radius for consistent look
+    shadowColor: '#000', // Fix: Added shadow for depth
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   profileHeader: {
     flexDirection: 'row',
@@ -1059,14 +1181,15 @@ const styles = StyleSheet.create({
   changePasswordButton: {
     backgroundColor: '#4a6da7',
     borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 20,
   },
   changePasswordText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  addressInput: {
+    marginTop: 8,
+    textAlignVertical: "top",
   },
 });
 
