@@ -1,5 +1,5 @@
 // app/screens/admin/Deliveries.tsx (completed)
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,22 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import useStore from "../../../utils/useStore";
+
+//firebase imports
+import { FIREBASE_DB, FIREBASE_AUTH } from "../../../FirebaseConfig";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDoc,
+  doc,
+  updateDoc,
+  Timestamp,
+  onSnapshot,
+} from "firebase/firestore";
 
 const deliveriesData = [
   {
@@ -58,6 +74,36 @@ const AdminDeliveries = () => {
   //zustand
   const setOrderSelected = useStore((state) => state.setOrderSelected);
   const ordersStored = useStore((state) => state.ordersStored);
+  const deliveryPersonsIds = useStore((state) => state.deliveryPersonsIds);
+  const setDeliveryPersons = useStore(
+    (state) => state.setDeliveryPersons
+  );
+  useEffect(() => {
+    const deliveryPersonelList = [];
+    if (deliveryPersonsIds.length > 0) {
+      const fetchDeliveryPersonelLocation = async () => {
+        const deliveryPersonelRef = collection(FIREBASE_DB, "userProfiles");
+        const q = query(
+          deliveryPersonelRef,
+          orderBy("createdAt", "desc"),
+          limit(3)
+        );
+
+        const querySnapshot = await getDocs(q);
+       
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (!data?.position || !data?.isAvailable) return;
+          deliveryPersonelList.push(data);
+        });
+        setDeliveryPersons(deliveryPersonelList);
+      };
+
+      fetchDeliveryPersonelLocation();
+    } else {
+      return;
+    }
+  }, [deliveryPersonsIds]);
 
   const getFilteredDeliveries = () => {
     if (activeTab === "all") return deliveriesData;

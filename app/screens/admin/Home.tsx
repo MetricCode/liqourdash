@@ -28,6 +28,7 @@ import {
   doc,
   updateDoc,
   Timestamp,
+  onSnapshot,
 } from "firebase/firestore";
 //zustand
 import useStore from "../../../utils/useStore";
@@ -39,6 +40,9 @@ import { NavigationProp, useIsFocused } from "@react-navigation/native";
 const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
   //fetch function from zustand
   const setOrdersStored = useStore((state) => state.setOrdersStored);
+  const setDeliveryPersonsIds = useStore(
+    (state) => state.setDeliveryPersonsIds
+  );
   // Animation values
   const [fadeAnim] = useState(new Animated.Value(0));
   const [headerScaleAnim] = useState(new Animated.Value(0.95));
@@ -112,6 +116,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
     await fetchAdminName();
     await fetchStats();
     await fetchRecentOrders();
+    await fetchDeliveryPersonelIds();
   }, []);
 
   // Pull-to-refresh function
@@ -254,7 +259,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
       });
 
       setRecentOrders(orders);
-      console.log("Recent Orders:", orders);
+ 
       setOrdersStored(orders);
       setLoadingOrders(false);
     } catch (error) {
@@ -291,6 +296,50 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
           date: "Apr 30, 2025",
         },
       ]);
+    }
+  };
+
+  const fetchDeliveryPersonelIds = () => {
+    try {
+      const deliveryPersonelRef = collection(FIREBASE_DB, "users");
+      const q = query(deliveryPersonelRef, orderBy("createdAt", "desc"));
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const deliveryPersonelList = [];
+          snapshot.docs.forEach((doc) => {
+            try {
+              const data = doc.data();
+              if (!data.role || !doc.id) {
+                console.warn("Invalid order document:", data);
+                return;
+              }
+              if (data.role === "delivery") {
+                deliveryPersonelList.push({ id: doc.id, email: data.email });
+              }
+            } catch (error) {
+              console.error("Error processing order document:", doc.id, error);
+            }
+          });
+          setDeliveryPersonsIds(deliveryPersonelList);
+          // setOrders(ordersList);
+          // setOrdersStored(ordersList);
+        },
+        (error) => {
+          console.error("Error in orders snapshot:", error);
+          Alert.alert(
+            "Error",
+            "Failed to load orders. Please check your connection."
+          );
+        }
+      );
+
+      return unsubscribe;
+    } catch (error) {
+      console.error("Error setting up orders listener:", error);
+
+      return () => {};
     }
   };
 
