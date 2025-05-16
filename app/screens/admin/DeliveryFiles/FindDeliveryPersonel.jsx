@@ -1,5 +1,5 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useRoute } from "@react-navigation/native";
 import { useNavigation } from "@react-navigation/native";
 
@@ -14,7 +14,10 @@ import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 //zustand
 import useStore from "../../../../utils/useStore";
 
+
+
 const FindDeliveryPersonel = () => {
+
   //navigation
   //navigation
   const navigation = useNavigation();
@@ -27,8 +30,13 @@ const FindDeliveryPersonel = () => {
   // let locationToDeliverFrom = useStore((state) => state.orderSelected.customerInfo.address);
   const setMyStoredLocation = useStore((state) => state.setMyStoredLocation);
 
+
+
   return (
-    <DeliveryPersonelLayout title="Find Delivery Personel" snapPoints={["40","85%"]}>
+    <DeliveryPersonelLayout
+      title="Find Delivery Personel"
+      snapPoints={["40", "85%"]}
+    >
       <View style={{ marginVertical: 10 }}>
         <Text style={{ fontSize: 18, marginBottom: 3 }}>From</Text>
         <MapsSearchBar

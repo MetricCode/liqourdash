@@ -10,11 +10,15 @@ const useStore = create((set) => ({
   setLocationToDeliverFrom: (newLocation) =>
     set({ locationToDeliverFrom: newLocation }),
 
+  deliveryPersonsIds: [],
+  setDeliveryPersonsIds: (newIds) => set({ deliveryPersonsIds: newIds }),
+  deliveryPersons: [],
+  setDeliveryPersons: (newPersons) => set({ deliveryPersons: newPersons }),
   //customer data
   myStoredLocation: null,
   userAddress: null,
   customerOrders: [],
-  setCustomerOrders: (newOrders) => set({ customerOrders: [newOrders] }),
+  setCustomerOrders: (newOrders) => set({ customerOrders: newOrders }),
 
   setMyStoredLocation: (newLocation) =>
     set({ myStoredLocation: newLocation.coords }),

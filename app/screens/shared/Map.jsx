@@ -11,6 +11,9 @@ import useStore from "../../../utils/useStore";
 import MapsSearchBar from "./MapsSearchBar";
 
 const Map = () => {
+  
+  //zustand
+
   const locationToDeliverFrom = useStore(
     (state) => state.locationToDeliverFrom
   );
@@ -94,7 +97,9 @@ const Map = () => {
                 latitude: destinationLocation?.lat,
                 longitude: destinationLocation?.lng,
               }}
-            />
+            >
+              <Image source={require("../../../utils/images/Delivery.png")} style={{width:40,height:40}} />
+            </Marker>
           )}
           <MapViewDirections
             origin={{

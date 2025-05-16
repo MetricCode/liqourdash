@@ -24,6 +24,9 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AntDesign from "@expo/vector-icons/AntDesign";
 
 const AssignDelivery = () => {
+  const deliveryPersons = useStore((state) => state.deliveryPersons);
+  console.log("deliveryPersons", deliveryPersons);
+
   //navigation
   const navigation = useNavigation();
   const route = useRoute();
