@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  FlatList
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FIREBASE_DB, FIREBASE_AUTH } from "../../../FirebaseConfig";
@@ -310,151 +311,161 @@ const Checkout = () => {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery Information</Text>
+      <FlatList
+       data={["1"]}
+       contentContainerStyle={styles.content}
+       showsVerticalScrollIndicator={false}
+       keyboardShouldPersistTaps="handled"
+       renderItem={() => (
+         <>
+           <View style={styles.section}>
+             <Text style={styles.sectionTitle}>Delivery Information</Text>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Full Name</Text>
-            <TextInput
-              style={styles.input}
-              value={userProfile.name}
-              onChangeText={(text) =>
-                setUserProfile({ ...userProfile, name: text })
-              }
-              placeholder="Enter your full name"
-              placeholderTextColor="#999"
-            />
-          </View>
+             <View style={styles.inputContainer}>
+               <Text style={styles.inputLabel}>Full Name</Text>
+               <TextInput
+                 style={styles.input}
+                 value={userProfile.name}
+                 onChangeText={(text) =>
+                   setUserProfile({ ...userProfile, name: text })
+                 }
+                 placeholder="Enter your full name"
+                 placeholderTextColor="#999"
+               />
+             </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Phone Number</Text>
-            <TextInput
-              style={styles.input}
-              value={userProfile.phone}
-              onChangeText={(text) =>
-                setUserProfile({ ...userProfile, phone: text })
-              }
-              placeholder="Enter your phone number"
-              placeholderTextColor="#999"
-              keyboardType="phone-pad"
-            />
-          </View>
+             <View style={styles.inputContainer}>
+               <Text style={styles.inputLabel}>Phone Number</Text>
+               <TextInput
+                 style={styles.input}
+                 value={userProfile.phone}
+                 onChangeText={(text) =>
+                   setUserProfile({ ...userProfile, phone: text })
+                 }
+                 placeholder="Enter your phone number"
+                 placeholderTextColor="#999"
+                 keyboardType="phone-pad"
+               />
+             </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Delivery Address</Text>
-            <MapsSearchBar
-              stylesPasses={[styles.input, styles.textArea]}
-              placeholderText={deliveryAddress}
-              onSelectFunction={(data, details) => {
-                setDeliveryAddress(data.description);
-                setUserProfile({
-                  ...userProfile,
-                  address: data.description,
-                  position: details.geometry.location,
-                });
-              }}
-            />
-            {/* <TextInput
-              style={[styles.input, styles.textArea]}
-              value={deliveryAddress}
-              onChangeText={setDeliveryAddress}
-              placeholder="Enter your full delivery address"
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={3}
-            /> */}
-          </View>
+             <View style={styles.inputContainer}>
+               <Text style={styles.inputLabel}>Delivery Address</Text>
+               <MapsSearchBar
+                 stylesPasses={[styles.input, styles.textArea]}
+                 placeholderText={deliveryAddress}
+                 onSelectFunction={(data, details) => {
+                   setDeliveryAddress(data.description);
+                   setUserProfile({
+                     ...userProfile,
+                     address: data.description,
+                     position: details.geometry.location,
+                   });
+                 }}
+               />
+               {/* <TextInput
+             style={[styles.input, styles.textArea]}
+             value={deliveryAddress}
+             onChangeText={setDeliveryAddress}
+             placeholder="Enter your full delivery address"
+             placeholderTextColor="#999"
+             multiline
+             numberOfLines={3}
+           /> */}
+             </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Delivery Note (Optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={deliveryNote}
-              onChangeText={setDeliveryNote}
-              placeholder="Any special instructions for delivery"
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-        </View>
+             <View style={styles.inputContainer}>
+               <Text style={styles.inputLabel}>Delivery Note (Optional)</Text>
+               <TextInput
+                 style={[styles.input, styles.textArea]}
+                 value={deliveryNote}
+                 onChangeText={setDeliveryNote}
+                 placeholder="Any special instructions for delivery"
+                 placeholderTextColor="#999"
+                 multiline
+                 numberOfLines={3}
+               />
+             </View>
+           </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
+           <View style={styles.section}>
+             <Text style={styles.sectionTitle}>Payment Method</Text>
 
-          <View style={styles.paymentOptions}>
-            <TouchableOpacity
-              style={[
-                styles.paymentOption,
-                paymentMethod === "cash" && styles.selectedPaymentOption,
-              ]}
-              onPress={() => setPaymentMethod("cash")}
-            >
-              <Ionicons
-                name="cash-outline"
-                size={24}
-                color={paymentMethod === "cash" ? "#4a6da7" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.paymentOptionText,
-                  paymentMethod === "cash" && styles.selectedPaymentOptionText,
-                ]}
-              >
-                Cash on Delivery
-              </Text>
-            </TouchableOpacity>
+             <View style={styles.paymentOptions}>
+               <TouchableOpacity
+                 style={[
+                   styles.paymentOption,
+                   paymentMethod === "cash" && styles.selectedPaymentOption,
+                 ]}
+                 onPress={() => setPaymentMethod("cash")}
+               >
+                 <Ionicons
+                   name="cash-outline"
+                   size={24}
+                   color={paymentMethod === "cash" ? "#4a6da7" : "#666"}
+                 />
+                 <Text
+                   style={[
+                     styles.paymentOptionText,
+                     paymentMethod === "cash" &&
+                       styles.selectedPaymentOptionText,
+                   ]}
+                 >
+                   Cash on Delivery
+                 </Text>
+               </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.paymentOption,
-                paymentMethod === "mpesa" && styles.selectedPaymentOption,
-              ]}
-              onPress={() => setPaymentMethod("mpesa")}
-            >
-              <Ionicons
-                name="phone-portrait-outline"
-                size={24}
-                color={paymentMethod === "mpesa" ? "#4a6da7" : "#666"}
-              />
-              <Text
-                style={[
-                  styles.paymentOptionText,
-                  paymentMethod === "mpesa" && styles.selectedPaymentOptionText,
-                ]}
-              >
-                M-Pesa
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+               <TouchableOpacity
+                 style={[
+                   styles.paymentOption,
+                   paymentMethod === "mpesa" && styles.selectedPaymentOption,
+                 ]}
+                 onPress={() => setPaymentMethod("mpesa")}
+               >
+                 <Ionicons
+                   name="phone-portrait-outline"
+                   size={24}
+                   color={paymentMethod === "mpesa" ? "#4a6da7" : "#666"}
+                 />
+                 <Text
+                   style={[
+                     styles.paymentOptionText,
+                     paymentMethod === "mpesa" &&
+                       styles.selectedPaymentOptionText,
+                   ]}
+                 >
+                   M-Pesa
+                 </Text>
+               </TouchableOpacity>
+             </View>
+           </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Summary</Text>
+           <View style={styles.section}>
+             <Text style={styles.sectionTitle}>Order Summary</Text>
 
-          <View style={styles.orderSummary}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>${subtotal.toFixed(2)}</Text>
-            </View>
+             <View style={styles.orderSummary}>
+               <View style={styles.summaryRow}>
+                 <Text style={styles.summaryLabel}>Subtotal</Text>
+                 <Text style={styles.summaryValue}>
+                   ${subtotal.toFixed(2)}
+                 </Text>
+               </View>
 
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Delivery Fee</Text>
-              <Text style={styles.summaryValue}>${deliveryFee.toFixed(2)}</Text>
-            </View>
+               <View style={styles.summaryRow}>
+                 <Text style={styles.summaryLabel}>Delivery Fee</Text>
+                 <Text style={styles.summaryValue}>
+                   ${deliveryFee.toFixed(2)}
+                 </Text>
+               </View>
 
-            <View style={[styles.summaryRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+               <View style={[styles.summaryRow, styles.totalRow]}>
+                 <Text style={styles.totalLabel}>Total</Text>
+                 <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+               </View>
+             </View>
+           </View>
+         </>
+       )}
+     ></FlatList>
 
       <View style={styles.footer}>
         <TouchableOpacity
