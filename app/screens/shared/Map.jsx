@@ -36,7 +36,21 @@ const Map = () => {
   const destinationLocation = useStore(
     (state) => state.orderSelected.customerInfo.position
   );
+
   console.log("destinationLocation", destinationLocation);
+
+  const setDeliveryFees = useStore((state) => state.setDeliveryFees);
+  const deliveryFees =
+    getDistanceFromLatLonInKm(
+      location.latitude,
+      location.longitude,
+      destinationLocation.lat,
+      destinationLocation.lng
+    ) * 100;
+
+  useEffect(() => {
+    setDeliveryFees(deliveryFees);
+  }, []);
 
   let region = {};
   if (!location.latitude || !location.longitude) {
@@ -77,16 +91,6 @@ const Map = () => {
     };
   }
 
-  const setDeliveryFees = useStore((state) => state.setDeliveryFees);
-  setDeliveryFees(
-    getDistanceFromLatLonInKm(
-      location.latitude,
-      location.longitude,
-      destinationLocation.lat,
-      destinationLocation.lng
-    ) * 100
-  );
-
   return (
     location.latitude && (
       <View>
@@ -107,7 +111,7 @@ const Map = () => {
           {destinationLocation?.lat && (
             <>
               <Marker
-                key="deliverTO"
+                key="TO"
                 coordinate={{
                   latitude: destinationLocation?.lat,
                   longitude: destinationLocation?.lng,
@@ -129,24 +133,24 @@ const Map = () => {
                   </Marker>
                 </>
               ))}
-              <MapViewDirections
-                origin={{
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                }}
-                destination={{
-                  latitude: destinationLocation?.lat,
-                  longitude: destinationLocation?.lng,
-                }}
-                apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}
-                strokeColor="red"
-                strokeWidth={2}
-                onError={(errorMessage) => {
-                  console.log("Error: ", errorMessage);
-                }}
-              />
             </>
           )}
+          <MapViewDirections
+            origin={{
+              latitude: location.latitude,
+              longitude: location.longitude,
+            }}
+            destination={{
+              latitude: destinationLocation?.lat,
+              longitude: destinationLocation?.lng,
+            }}
+            apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}
+            strokeColor="red"
+            strokeWidth={2}
+            onError={(errorMessage) => {
+              console.log("Error: ", errorMessage);
+            }}
+          />
         </MapView>
       </View>
     )

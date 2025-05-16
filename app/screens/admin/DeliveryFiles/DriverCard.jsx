@@ -40,7 +40,7 @@ const DriverCard = ({ item, selected, setSelected }) => {
       width: 56,
       height: 56,
       borderRadius: 28,
-      backgroundColor: "#4a6da7", // Example for bg-general-200
+      backgroundColor:selected === item.id ? "white" : "#4a6da7", // Example for bg-general-200
     },
     contentContainer: {
       flex: 1,
