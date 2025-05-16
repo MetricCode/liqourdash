@@ -24,9 +24,9 @@ const assignDeliveriesStack = () => {
       screenOptions={{
         headerShown: false,
       }}
-      initialRouteName="Deliveries"
+      initialRouteName="Orders"
     >
-      <Stack.Screen name="Deliveries" component={AdminDeliveries} />
+      <Tab.Screen name="Orders" component={AdminOrders} />
       <Stack.Screen name="AssignDeliveries" component={AssignDelivery} />
       <Stack.Screen
         name="FindDeliveryPersonel"
@@ -85,8 +85,7 @@ const AdminNavigator = () => {
       })}
     >
       <Tab.Screen name="Dashboard" component={AdminHome} />
-      <Tab.Screen name="Orders" component={AdminOrders} />
-      <Tab.Screen name="Deliveries" component={assignDeliveriesStack} />
+      <Tab.Screen name="Orders" component={assignDeliveriesStack} />
       <Tab.Screen name="Products" component={AdminProducts} />
       <Tab.Screen name="Categories" component={CategoriesManagement} />
       <Tab.Screen name="Sales" component={AdminSales} />

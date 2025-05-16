@@ -5,23 +5,55 @@ import {
   View,
   TouchableOpacity,
 } from "react-native";
-import React from "react";
+import React, { useEffect } from "react";
 import DeliveryPersonelLayout from "./DeliveryPersonelLayout";
 import DriverCard from "./DriverCard";
 
 //temp data
 import drivers from "../../../../utils/mockDeliveryRiderData.json";
 
+//util  function
+import { sortDeliveryPersonsByDistance } from "../../../../utils/MapUtilFunctions";
+
+//zustand
+import useStore from "../../../../utils/useStore";
+
 const ConfirmDeliveryPersonel = () => {
+  //zustand
+  const deliveryPersons = useStore((state) => state.deliveryPersons);
+  console.log("deliveryPersons", deliveryPersons);
+
+  const locationToDeliverFrom = useStore(
+    (state) => state.locationToDeliverFrom
+  );
+
+  const location = {
+    latitude:
+      locationToDeliverFrom?.coords?.latitude ||
+      locationToDeliverFrom?.position?.lat ||
+      0,
+    longitude:
+      locationToDeliverFrom?.coords?.longitude ||
+      locationToDeliverFrom?.position?.lng ||
+      0,
+  };
+  useEffect(() => {
+    console.log("locationToDeliverFrom confirm", location);
+  }, [locationToDeliverFrom]);
+
+  const orderedSortedDeliveryPersonel = sortDeliveryPersonsByDistance(
+    deliveryPersons,
+    location
+  );
+
   return (
     <DeliveryPersonelLayout
       title="Confirm Delivery Personel"
       snapPoints={["30%", "40%", "65%", "85%"]}
     >
       <FlatList
-        data={drivers}
+        data={orderedSortedDeliveryPersonel}
         renderItem={({ item }) => <DriverCard selected={"1"} item={item} />}
-        
         ListFooterComponent={() => (
           <View style={{ justifyContent: "center", alignItems: "center" }}>
             <TouchableOpacity

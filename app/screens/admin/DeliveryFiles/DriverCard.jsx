@@ -3,8 +3,11 @@ import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
 
 //icons
 import Entypo from "@expo/vector-icons/Entypo";
+import useStore from "../../../../utils/useStore";
 
 const DriverCard = ({ item, selected, setSelected }) => {
+  const deliveryFees = useStore((state) => state.deliveryFees);
+
   const formatTime = (minutes) => {
     const formattedMinutes = +(minutes?.toFixed(0) || 0);
 
@@ -37,6 +40,7 @@ const DriverCard = ({ item, selected, setSelected }) => {
       width: 56,
       height: 56,
       borderRadius: 28,
+      backgroundColor: "#4a6da7", // Example for bg-general-200
     },
     contentContainer: {
       flex: 1,
@@ -54,18 +58,18 @@ const DriverCard = ({ item, selected, setSelected }) => {
     titleText: {
       fontSize: 18,
       fontWeight: "bold",
-      color: selected === item.id ?"white" :"#4B5563",
+      color: selected === item.id ? "white" : "#4a6da7",
     },
     starContainer: {
       flexDirection: "row",
       alignItems: "center",
       marginLeft: 8,
     },
-  
+
     starText: {
       fontSize: 14,
       marginLeft: 4,
-      color: selected === item.id ?"white" :"#4B5563",
+      color: selected === item.id ? "white" : "#4B5563",
     },
     detailRow: {
       flexDirection: "row",
@@ -77,11 +81,11 @@ const DriverCard = ({ item, selected, setSelected }) => {
       flexDirection: "row",
       alignItems: "center",
     },
-  
+
     detailText: {
       fontSize: 14,
       marginLeft: 4,
-      color: selected === item.id ?"white" :"#4B5563",
+      color: selected === item.id ? "white" : "#4B5563",
     },
     divider: {
       fontSize: 14,
@@ -93,7 +97,6 @@ const DriverCard = ({ item, selected, setSelected }) => {
       height: 56,
     },
   });
-  
 
   return (
     <TouchableOpacity
@@ -103,47 +106,40 @@ const DriverCard = ({ item, selected, setSelected }) => {
         selected === item.id ? styles.selected : styles.unselected,
       ]}
     >
-      <Image
-        source={{ uri: item.driver.profile_image_url }}
+      <View
+        // source={{ uri: item.driver.profile_image_url }}
         style={styles.profileImage}
-      />
+      ></View>
 
       <View style={styles.contentContainer}>
         <View style={styles.titleRow}>
-          <Text style={styles.titleText}>
-            {item.driver.first_name} {item.driver.last_name}
-          </Text>
-          <View style={styles.starContainer}>
-            <Entypo name="star" size={24} color={selected === item.id ?"white" :"#4B5563"} />
+          <Text style={styles.titleText}>reg</Text>
+          {/* <View style={styles.starContainer}>
+            <Entypo
+              name="star"
+              size={24}
+              color={selected === item.id ? "white" : "#4B5563"}
+            />
             <Text style={styles.starText}>4</Text>
-          </View>
+          </View> */}
         </View>
 
         <View style={styles.detailRow}>
           <View style={styles.detailItem}>
-            <Text style={styles.detailText}>ksh {item.fare_price}</Text>
+            <Text style={styles.detailText}>ksh {deliveryFees.toFixed(2)}</Text>
           </View>
 
-          <Text style={styles.divider}>|</Text>
-
-          <Text style={styles.detailText}>{formatTime(item.time)}</Text>
+          <Text style={styles.detailText}></Text>
 
           <Text style={styles.divider}>|</Text>
 
-          <Text style={styles.detailText}>{item.driver.car_seats} seats</Text>
+          <Text style={styles.detailText}>
+            {item?.maxConcurrentOrders} max orders
+          </Text>
         </View>
       </View>
-
-      <Image
-        source={{ uri: item.driver.car_image_url }}
-        style={styles.carImage}
-        resizeMode="contain"
-      />
     </TouchableOpacity>
   );
-
-  
 };
 
 export default DriverCard;
-
