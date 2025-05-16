@@ -38,6 +38,11 @@ const { width } = Dimensions.get("window");
 import { NavigationProp, useIsFocused } from "@react-navigation/native";
 
 const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
+  const [storeLocation, setStoreLocation] = useState({
+    address: '',
+    position: { lat: 0, lng: 0 }
+  });
+
   //fetch function from zustand
   const setOrdersStored = useStore((state) => state.setOrdersStored);
   const setDeliveryPersonsIds = useStore(
@@ -110,6 +115,23 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
       cardsScaleAnim.setValue(0.97);
     }
   }, [isFocused, fadeAnim, headerScaleAnim, cardsScaleAnim]);
+  
+  const fetchStoreLocation = async () => {
+    try {
+      const storeRef = doc(FIREBASE_DB, "storeSettings", "location");
+      const storeSnap = await getDoc(storeRef);
+      
+      if (storeSnap.exists()) {
+        const data = storeSnap.data();
+        setStoreLocation({
+          address: data.address || '',
+          position: data.position || { lat: 0, lng: 0 }
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching store location:", error);
+    }
+  };
 
   // Fetch all data
   const fetchAllData = useCallback(async () => {
@@ -117,6 +139,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
     await fetchStats();
     await fetchRecentOrders();
     await fetchDeliveryPersonelIds();
+    await fetchStoreLocation();
   }, []);
 
   // Pull-to-refresh function
@@ -307,7 +330,7 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          const deliveryPersonelList = [];
+          const deliveryPersonelList: { id: string; email: string }[] = [];
           snapshot.docs.forEach((doc) => {
             try {
               const data = doc.data();
@@ -419,8 +442,28 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Admin Dashboard</Text>
           {adminName && (
-            <Text style={styles.welcomeText}>Welcome, {adminName}</Text>
+          <Text style={styles.welcomeText}>Welcome, {adminName}</Text>
           )}
+          {/* Add this location indicator */}
+          {storeLocation?.address ? (
+            <View style={styles.locationIndicator}>
+              <Ionicons name="location" size={12} color="#0097a7" />
+              <Text style={styles.locationText} numberOfLines={1} ellipsizeMode="tail">
+                {storeLocation.address}
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={styles.locationIndicator}
+              onPress={() => navigation.navigate("StoreLocation")}
+            >
+              <Ionicons name="location-outline" size={12} color="#999" />
+              <Text style={[styles.locationText, {color: "#999"}]}>
+                Set store location
+              </Text>
+            </TouchableOpacity>
+          )}
+
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -575,6 +618,34 @@ const AdminHome = ({ navigation }: { navigation: NavigationProp<any> }) => {
                 <Ionicons name="car-outline" size={24} color="#f57c00" />
               </View>
               <Text style={styles.actionText}>Deliveries</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                // Check if we already have a store location
+                if (storeLocation?.address) {
+                  // Show a modal or alert with current location and option to edit
+                  Alert.alert(
+                    "Store Location",
+                    `Current location: ${storeLocation.address}`,
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { 
+                        text: "Edit Location", 
+                        onPress: () => navigation.navigate("StoreLocation")
+                      }
+                    ]
+                  );
+                } else {
+                  // Navigate directly to location edit if none set
+                  navigation.navigate("StoreLocation");
+                }
+              }}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: "#e0f7fa" }]}>
+                <Ionicons name="location-outline" size={24} color="#0097a7" />
+              </View>
+              <Text style={styles.actionText}>Store Location</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -1113,6 +1184,17 @@ const styles = StyleSheet.create({
     color: "#888",
     marginTop: 5,
   },
+  locationIndicator: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 4,
+},
+locationText: {
+  fontSize: 12, 
+  color: '#0097a7',
+  marginLeft: 4,
+  maxWidth: width * 0.5,
+},
 });
 
 export default AdminHome;

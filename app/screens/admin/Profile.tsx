@@ -552,8 +552,6 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
     switch(item.type) {
       case 'account':
         return renderAccountSection();
-      case 'location':
-        return renderLocationSection();
       case 'analytics':
         return renderAnalyticsSection();
       case 'activity':
@@ -630,108 +628,6 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
             <Ionicons name="lock-closed-outline" size={18} color="#4a6da7" style={styles.buttonIcon} />
             <Text style={styles.editProfileText}>Change Password</Text>
           </TouchableOpacity>
-        </View>
-      </Animated.View>
-    );
-  };
-
-  // Render Store Location Section
-  const renderLocationSection = () => {
-    return (
-      <Animated.View 
-        style={[
-          styles.sectionContainer, 
-          { 
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }]
-          }
-        ]}
-      >
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Store Location</Text>
-          {!editStoreLocation && (
-            <TouchableOpacity onPress={() => setEditStoreLocation(true)}>
-              <Text style={styles.editText}>Edit</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        
-        <View style={styles.locationCard} keyboardShouldPersistTaps= "handled">
-          {editStoreLocation ? (
-            <View>
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Store Address</Text>
-                <View style={{ zIndex: 1000 }} >
-                  <MapsSearchBar
-                    stylesPasses={[styles.locationInput]}
-                    inputContainerStyle={{}}
-                    placeholderText="Enter store address"
-                    onSelectFunction={(data: { description: string }, details: any = null) => {
-                      if (data && data.description) {
-                        const newLocation = {
-                          address: data.description,
-                          position: details?.geometry?.location || storeLocation.position
-                        };
-                        console.log("New location selected:", newLocation); // Debug log
-                        setStoreLocation(newLocation);
-                      }
-                    }}
-                    Icon={Ionicons}
-                    iconName="location"
-                  />
-                </View>
-              </View>
-              
-              {storeLocation.address && (
-                <View style={styles.selectedLocationContainer}>
-                  <Ionicons name="location" size={20} color="#4a6da7" />
-                  <Text style={styles.selectedLocationText}>{storeLocation.address}</Text>
-                </View>
-              )}
-              
-              <View style={styles.locationButtonRow}>
-                <TouchableOpacity
-                  style={styles.cancelLocationButton}
-                  onPress={() => setEditStoreLocation(false)}
-                  disabled={savingLocation}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.saveLocationButton,
-                    savingLocation && styles.disabledButton
-                  ]}
-                  onPress={handleSaveStoreLocation}
-                  disabled={savingLocation}
-                >
-                  {savingLocation ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Save Location</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.locationDisplay}>
-              <View style={styles.locationIconContainer}>
-                <Ionicons name="location" size={24} color="#4a6da7" />
-              </View>
-              <View style={styles.locationInfo}>
-                <Text style={styles.locationLabel}>Store Address</Text>
-                <Text style={styles.locationAddress}>
-                  {storeLocation.address || 'No store location set'}
-                </Text>
-                {storeLocation.address && (
-                  <TouchableOpacity style={styles.viewMapButton}>
-                    <Text style={styles.viewMapText}>View on Map</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
         </View>
       </Animated.View>
     );

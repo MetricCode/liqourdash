@@ -14,9 +14,25 @@ import AdminDeliveries from "../admin/Deliveries";
 import AssignDelivery from "../admin/DeliveryFiles/AssignDelivery";
 import FindDeliveryPersonel from "../admin/DeliveryFiles/FindDeliveryPersonel";
 import ConfirmDeliveryPersonel from "../admin/DeliveryFiles/ConfirmDeliveryPersonel";
+import StoreLocation from '../admin/StoreLocation';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+
+// Create a stack for Dashboard that includes StoreLocation
+const DashboardStack = () => {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+      initialRouteName="HomeScreen"
+    >
+      <Stack.Screen name="HomeScreen" component={AdminHome} />
+      <Stack.Screen name="StoreLocation" component={StoreLocation} />
+    </Stack.Navigator>
+  );
+};
 
 const assignDeliveriesStack = () => {
   return (
@@ -84,7 +100,8 @@ const AdminNavigator = () => {
         headerShown: false,
       })}
     >
-      <Tab.Screen name="Dashboard" component={AdminHome} />
+      {/* Changed Dashboard to use the stack instead of just AdminHome */}
+      <Tab.Screen name="Dashboard" component={DashboardStack} />
       <Tab.Screen name="Orders" component={assignDeliveriesStack} />
       <Tab.Screen name="Products" component={AdminProducts} />
       <Tab.Screen name="Categories" component={CategoriesManagement} />
