@@ -411,15 +411,15 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
 
   // Handle save store location
   const handleSaveStoreLocation = async () => {
-    if (!storeLocation.address || !storeLocation.address.trim()) {
-      Alert.alert("Error", "Please select a valid address from the dropdown");
+    if (!storeLocation.address) {
+      Alert.alert("Error", "Please enter a store location");
       return;
     }
 
     try {
       setSavingLocation(true);
-      const storeRef = doc(FIREBASE_DB, "storeSettings", "location");
       
+      const storeRef = doc(FIREBASE_DB, "storeSettings", "location");
       await setDoc(storeRef, {
         address: storeLocation.address,
         position: storeLocation.position,
@@ -427,11 +427,14 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
         updatedBy: FIREBASE_AUTH.currentUser?.uid || 'unknown'
       }, { merge: true });
       
+      // Also update the location in all active orders
+      await updateOrdersWithStoreLocation(storeLocation);
+      
       setEditStoreLocation(false);
-      Alert.alert("Success", "Store location updated successfully");
+      Alert.alert("Success", "Store location has been updated");
     } catch (error) {
-      console.error("Error saving location:", error);
-      Alert.alert("Error", "Failed to save location");
+      console.error("Error saving store location:", error);
+      Alert.alert("Error", "Failed to update store location");
     } finally {
       setSavingLocation(false);
     }
@@ -653,12 +656,12 @@ const AdminProfile = ({ navigation, route }: { navigation: NavigationProp<any>, 
           )}
         </View>
         
-        <View style={styles.locationCard}>
+        <View style={styles.locationCard} keyboardShouldPersistTaps= "handled">
           {editStoreLocation ? (
             <View>
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>Store Address</Text>
-                <View style={{ zIndex: 1000 }}>
+                <View style={{ zIndex: 1000 }} >
                   <MapsSearchBar
                     stylesPasses={[styles.locationInput]}
                     inputContainerStyle={{}}
